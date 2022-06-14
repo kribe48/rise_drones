@@ -29,12 +29,11 @@ jobs:
         pip install --upgrade setuptools
         pip install wheel
         pip install pylint==2.14.1
-        pip install pylint-exit==1.2.0
         pip install -r requirements.txt
     - id: pylint
       name: Analyze the code
       run: |
-        pylint $(git ls-files '*.py') > pylint.log || pylint-exit $?
+        pylint $(git ls-files '*.py') > pylint.log
     - id: changed-files
       name: Look for changed files
       if: ${{ github.event_name == 'pull_request' && failure() && steps.pylint.outcome == 'failure' }}

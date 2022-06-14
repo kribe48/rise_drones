@@ -29,11 +29,12 @@ jobs:
         pip install --upgrade setuptools
         pip install wheel
         pip install pylint==2.14.1
+        pip install pylint-exit=1.2.0
         pip install -r requirements.txt
     - id: pylint
       name: Analyze the code
       run: |
-        pylint $(git ls-files '*.py') > pylint.log
+        pylint $(git ls-files '*.py') > pylint.log || pylint-exit $?
     - id: changed-files
       name: Look for changed files
       if: ${{ github.event_name == 'pull_request' && failure() && steps.pylint.outcome == 'failure' }}
@@ -78,10 +79,10 @@ jobs:
         notifications="${notifications//$'\r'/'%0D'}"
         [ -z ${notifications} ] || notifications="### Refactoring and conventions :bulb:%0A\`\`\`%0A"${notifications}"%0A\`\`\`"
         echo "::set-output name=body::$notifications"
-    - id: pytest
-      name: Test the code
-      run: |
-        pytest -rf > pytest.log
+    #- id: pytest
+    #  name: Test the code
+    #  run: |
+    #    pytest -rf > pytest.log
     - id: pytest-errors
       name: Prepare pytest error messages
       if: ${{ github.event_name == 'pull_request' && failure() && steps.pytest.outcome == 'failure' }}

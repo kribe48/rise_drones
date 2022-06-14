@@ -25,6 +25,7 @@ import sys
 import threading
 import time
 import traceback
+import uuid
 
 import zmq
 import datetime
@@ -120,7 +121,7 @@ class AppLmd():
     self.start_pos_received = False
     #USSP stuff
     self.ussp = dss.client.UsspClientLib(app_id, _context)
-    self.ussp.connect(ussp_ip="localhost", req_port=5555, pub_port=5556 )
+    self.ussp.connect(ussp_ip="localhost", req_port=5555, pub_port=5556, sub_port=5557 )
     #TODO add valid operator ID
     self.operator_id = "SWE33DummyOperatorID"
 
@@ -259,9 +260,10 @@ class AppLmd():
       _logger.debug("Waiting for the drone to stream its current position")
       time.sleep(0.5)
     current_position = copy.deepcopy(self.start_pos)
+    self.uas_id = str(uuid.uuid1())
     for position in self.positions_to_visit :
       positions = [current_position, position]
-      (plan_id, delay) = self.ussp.request_plan(self.operator_id, epsg=4979, positions=positions, takeoff_time=takeoff_time, speed=self.cruise_speed, max_speed=15.0, ascend_rate=2.0, descend_rate=1.0)
+      (plan_id, delay) = self.ussp.request_plan(self.operator_id, self.uas_id,  epsg=4979, positions=positions, takeoff_time=takeoff_time, speed=self.cruise_speed, max_speed=15.0, ascend_rate=2.0, descend_rate=1.0)
       if plan_id is None or delay is None:
         raise dss.auxiliaries.exception.Error
       time.sleep(delay)

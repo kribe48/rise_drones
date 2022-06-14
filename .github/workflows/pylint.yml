@@ -29,7 +29,7 @@ jobs:
         pip install --upgrade setuptools
         pip install wheel
         pip install pylint==2.14.1
-        pip install pylint-exit=1.2.0
+        pip install pylint-exit==1.2.0
         pip install -r requirements.txt
     - id: pylint
       name: Analyze the code

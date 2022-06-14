@@ -83,36 +83,36 @@ jobs:
     #  name: Test the code
     #  run: |
     #    pytest -rf > pytest.log
-    - id: pytest-errors
-      name: Prepare pytest error messages
-      if: ${{ github.event_name == 'pull_request' && failure() && steps.pytest.outcome == 'failure' }}
-      run: |
-        error="$(sed '1,/short\ test\ summary\ info/d' pytest.log)"
-        error="${error//'%'/'%25'}"
-        error="${error//$'\n'/'%0A'}"
-        error="${error//$'\r'/'%0D'}"
-        echo "::set-output name=body::$error"
-    - name: Report pytest errors
-      if: ${{ github.event_name == 'pull_request' && failure() && steps.pytest.outcome == 'failure' }}
-      uses: peter-evans/create-or-update-comment@v1
-      with:
-        issue-number: ${{github.event.pull_request.number}}
-        body: |
-          ### Some tests failed :confused:
-          ```
-          ${{ steps.pytest-errors.outputs.body }}
-          ```
-    - id: pytest-stats
-      name: Prepare pytest stats
-      if: ${{ github.event_name == 'pull_request' }}
-      run: |
-        stats="$(tail -n1 pytest.log | sed 's/\=//g')"
-        echo "::set-output name=body::$stats"
-    - name: Report success
-      if: ${{ github.event_name == 'pull_request' }}
-      uses: peter-evans/create-or-update-comment@v1
-      with:
-        issue-number: ${{github.event.pull_request.number}}
-        body: |
-          Test results: ${{ steps.pytest-stats.outputs.body }}
-          ${{ steps.pylint-rating.outputs.body }} :rocket: :heart:
+   # - id: pytest-errors
+   #   name: Prepare pytest error messages
+   #   if: ${{ github.event_name == 'pull_request' && failure() && steps.pytest.outcome == 'failure' }}
+   #   run: |
+   #     error="$(sed '1,/short\ test\ summary\ info/d' pytest.log)"
+   #     error="${error//'%'/'%25'}"
+   #     error="${error//$'\n'/'%0A'}"
+   #     error="${error//$'\r'/'%0D'}"
+   #     echo "::set-output name=body::$error"
+   # - name: Report pytest errors
+   #   if: ${{ github.event_name == 'pull_request' && failure() && steps.pytest.outcome == 'failure' }}
+   #   uses: peter-evans/create-or-update-comment@v1
+   #   with:
+   #     issue-number: ${{github.event.pull_request.number}}
+   #     body: |
+   #       ### Some tests failed :confused:
+   #       ```
+   #       ${{ steps.pytest-errors.outputs.body }}
+   #       ```
+   # - id: pytest-stats
+   #   name: Prepare pytest stats
+   #   if: ${{ github.event_name == 'pull_request' }}
+   #   run: |
+   #     stats="$(tail -n1 pytest.log | sed 's/\=//g')"
+   #     echo "::set-output name=body::$stats"
+   # - name: Report success
+   #   if: ${{ github.event_name == 'pull_request' }}
+   #   uses: peter-evans/create-or-update-comment@v1
+   #   with:
+   #     issue-number: ${{github.event.pull_request.number}}
+   #     body: |
+   #       Test results: ${{ steps.pytest-stats.outputs.body }}
+   #       ${{ steps.pylint-rating.outputs.body }} :rocket: :heart:

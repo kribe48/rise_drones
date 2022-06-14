@@ -33,7 +33,7 @@ jobs:
     - id: pylint
       name: Analyze the code
       run: |
-        pylint $(git ls-files '*.py') > pylint.log
+        pylint $(git ls-files '*.py')
     - id: changed-files
       name: Look for changed files
       if: ${{ github.event_name == 'pull_request' && failure() && steps.pylint.outcome == 'failure' }}

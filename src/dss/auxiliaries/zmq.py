@@ -32,13 +32,13 @@ def Context() -> zmq.Context:
 
 def get_subnet(ip: typing.Optional[str] = None, port: typing.Optional[int] = None) -> str:
   if ip:
-    for subnet in dss.auxiliaries.config.config['subnets']:
-      if dss.auxiliaries.config.config['subnets'][subnet]['ip'] in ip:
+    for subnet in dss.auxiliaries.config.config['zeroMQ']['subnets']:
+      if dss.auxiliaries.config.config['zeroMQ']['subnets'][subnet]['ip'] in ip:
         return subnet
 
   if port:
-    for subnet in dss.auxiliaries.config.config['subnets']:
-      if dss.auxiliaries.config.config['subnets'][subnet]['port_min'] <= port <= dss.auxiliaries.config.config['subnets'][subnet]['port_max']:
+    for subnet in dss.auxiliaries.config.config['zeroMQ']['subnets']:
+      if dss.auxiliaries.config.config['zeroMQ']['subnets'][subnet]['port_min'] <= port <= dss.auxiliaries.config.config['zeroMQ']['subnets'][subnet]['port_max']:
         return subnet
 
   return ''

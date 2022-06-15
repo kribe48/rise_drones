@@ -38,7 +38,7 @@ def receive_and_reply(socket):
 def _main():
   # parse command-line arguments
   parser = argparse.ArgumentParser(description='_zmq_rep.py', allow_abbrev=False)
-  parser.add_argument('--port', default=config["default_crm_port"], help=f'{config["default_crm_port"]}')
+  parser.add_argument('--port', default=config["CRM"]["default_crm_port"], help=f'{config["CRM"]["default_crm_port"]}')
   args = parser.parse_args()
 
   socket = dss.auxiliaries.zmq.Rep(zmq.Context(), port=args.port)

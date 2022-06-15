@@ -582,7 +582,6 @@ class KeyboardClient(dss.client.Client):
           self.await_controls()
           print('APPLICATION has the controls')
         else:
-          #Info_request (don’t know what arg yet..)​
           print("invalid command; press h for help")
       except dss.auxiliaries.exception.Nack as nack:
         print('NACK: {}'.format(nack.msg))

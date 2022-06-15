@@ -10,7 +10,7 @@ import typing
 import zmq
 
 import dss.auxiliaries
-import dss.auxiliaries.config
+from dss.auxiliaries.config import config
 import dss.client
 
 __author__ = 'Lennart Ochel <lennart.ochel@ri.se>, Andreas Gising <andreas.gising@ri.se>, Kristoffer Bergman <kristoffer.bergman@ri.se>, Hanna Müller <hanna.muller@ri.se>, Joel Nordahl'
@@ -47,8 +47,8 @@ class Server:
     # start heartbeat client
     if with_gcs:
       if gcs_address is None:
-        gcs_address = dss.auxiliaries.config.config['DSSHeartbeatClientSocket']
-      gcs_attempts = int(dss.auxiliaries.config.config['DSSHeartbeatAttempts'])
+        gcs_address = config['DSS']['HeartbeatClientSocket']
+      gcs_attempts = int(config['DSS']['HeartbeatAttempts'])
       self._gcs_heartbeat = dss.auxiliaries.heartbeat.Client(gcs_address, gcs_attempts, context=self._zmq_context)
 
       self._gcs_heartbeat.alive = True
@@ -71,7 +71,7 @@ class Server:
     drone_port = int(drone_port)
 
     # zmq sockets
-    app_port = None if crm else dss.auxiliaries.config.config['DSSServSocket'].split(':')[-1]
+    app_port = None if crm else config['DSS']['ServSocket'].split(':')[-1]
     if crm:
       # We will connect to crm, set random ports within range.
       self._serv_socket = dss.auxiliaries.zmq.Rep(self._zmq_context, port=app_port, label='dss', min_port=crm_port+1, max_port=crm_port+49)
@@ -83,8 +83,8 @@ class Server:
     self._logger.info('Starting pub server on %d... done', self._pub_socket.port)
 
     if photo:
-      self._photo = dss.server.photo.Client(self._zmq_context, dss.auxiliaries.config.config['DSSPhotoClient'])
-      self._logger.info('Connecting to photo client on %s... done', dss.auxiliaries.config.config['DSSPhotoClient'])
+      self._photo = dss.server.photo.Client(self._zmq_context, config['DSS']['PhotoClient'])
+      self._logger.info('Connecting to photo client on %s... done', config['DSS']['PhotoClient'])
 
     # all attributes are disabled by default
     self._pub_attributes = {'ATT':                   {'enabled': False, 'name': 'attitude'},
@@ -101,7 +101,7 @@ class Server:
     self._hexa = dss.server.Hexacopter(f'{drone_ip}:{drone_port}', baud, rangefinder)
 
     # init GLANA
-    self._hexa.glana = dss.server.Glana(self._zmq_context, dss.auxiliaries.config.config['GlanaClientSocket'])
+    self._hexa.glana = dss.server.Glana(self._zmq_context, config['DSS']['GlanaClientSocket'])
     self._hexa.glana_autogain = autogain
 
     # _commands is a lookup table for all the dss commands

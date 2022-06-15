@@ -436,6 +436,7 @@ class Client:
   # Engage dss srtl and wait for idle
   def dss_srtl(self, hover_time):
     self._dss.dss_srtl(hover_time)
+    height = 0.0
     while self._dss.get_armed():
       self.raise_if_aborted()
       try:

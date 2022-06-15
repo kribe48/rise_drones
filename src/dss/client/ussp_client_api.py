@@ -32,9 +32,8 @@ class UsspClientApi:
     self._sub_socket.close()
 
   def receive_subscribe_data(self):
-      msg_raw = self._sub_socket.recv()
-      topic, msg = msg_raw.split(maxsplit=1)
-      return topic, msg
+    topic, msg = self._sub_socket.recv()
+    return topic, msg
 
   def query_ground_height(self, lat, lon, epsg=4979):
     call = 'query ground height'

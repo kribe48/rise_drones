@@ -91,16 +91,16 @@ class UsspClientLib:
     else :
       start_idx = 2
     for idx in range(start_idx, len(plan)-1):
-        id_str =  "id%d" % wp_id
-        position = plan[idx]["position"]
-        prev_position = plan[idx-1]["position"]
-        (_, _, _, ds, _, _) = get_3d_distance(prev_position, position)
-        dt = datetime.datetime.fromisoformat(plan[idx]["time"]) - datetime.datetime.fromisoformat(plan[idx-1]["time"])
-        horizontal_speed = max(1.0, ds/dt.total_seconds())
-        wp_mission[id_str] = {
-          "lat" : position[1], "lon": position[0], "alt": position[2], "alt_type": "amsl", "heading": "course", "speed": horizontal_speed
-        }
-        wp_id += 1
+      id_str =  "id%d" % wp_id
+      position = plan[idx]["position"]
+      prev_position = plan[idx-1]["position"]
+      (_, _, _, ds, _, _) = get_3d_distance(prev_position, position)
+      dt = datetime.datetime.fromisoformat(plan[idx]["time"]) - datetime.datetime.fromisoformat(plan[idx-1]["time"])
+      horizontal_speed = max(1.0, ds/dt.total_seconds())
+      wp_mission[id_str] = {
+        "lat" : position[1], "lon": position[0], "alt": position[2], "alt_type": "amsl", "heading": "course", "speed": horizontal_speed
+      }
+      wp_id += 1
     return wp_mission
 
   def receive_ussp_data(self):

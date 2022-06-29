@@ -354,9 +354,9 @@ class Hexacopter:
   def get_nsat(self) -> int:
     return self.vehicle.gps_0.satellites_visible
 
-  # Method returns armed state. We concider armed state as flying.
+  # Method returns armed state. We consider armed state as flying.
   def is_flying(self) -> bool:
-    self.logger.warning(f'Depricated funciton is_flying, use property flying_state instead')
+    self.logger.warning('Deprecated function is_flying, use property flying_state instead')
     return self.vehicle.armed
 
   def is_armed(self) -> bool:
@@ -579,10 +579,10 @@ class Hexacopter:
       # Vehicle armed
       start_alt = self.get_position_lla_global().alt
 
-      # While armed, test trasition to flying state
+      # While armed, test transition to flying state
       while self.vehicle.armed:
         if self.flying_state != 'flying':
-          if 1 > self.get_position_lla_global().alt - start_alt:
+          if self.get_position_lla_global().alt - start_alt > 1.0:
             # Up and flying, update state
             self.flying_state = 'flying'
             self.logger.info(f'Flying state: {self.flying_state}')

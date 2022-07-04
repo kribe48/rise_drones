@@ -186,9 +186,11 @@ class Server:
 
     # register dss
     if crm:
+      self._capabilities = config['DSS']['Capabilities']
       self._crm = dss.client.CRM(self._zmq_context, crm, app_name='crm_dss.py', desc=description, app_id=self._dss_id)
       #register and start sending heartbeat to the CRM
-      answer = self._crm.register(self._dss_ip, self._serv_socket.port, type='dss')
+      self._logger.info(f"registering to CRM with capabilities: {self._capabilities}")
+      answer = self._crm.register(self._dss_ip, self._serv_socket.port, type='dss', capabilities=self._capabilities)
       if dss.auxiliaries.zmq.is_ack(answer):
         self._dss_id = answer['id']
       else:
@@ -196,6 +198,7 @@ class Server:
         self.alive = False
     else:
       self._crm = None
+      self._capabilities = None
 
   def exit_gracefully(self, *args):
     self._logger.warning('Shutdown due to interrupt')

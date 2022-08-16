@@ -1186,6 +1186,7 @@ class Server:
             answer = request(msg)
             if dss.auxiliaries.zmq.is_ack(answer):
               if self._task_event.is_set():
+                self._hexa.abort_task = True
                 self._task_event.clear()
               self._task = msg
               self._task_priority = priority

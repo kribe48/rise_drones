@@ -742,6 +742,7 @@ class Hexacopter:
         # USE ARDUPILOT POSITION CONTROLLER
         self.send_goto_lla(lookahead_wp)
         time.sleep(1.0)
+        self.raise_if_aborted()
 
   def task_gogo(self, next_wp):
     self._status_msg = 'gogo'

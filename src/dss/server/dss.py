@@ -936,6 +936,7 @@ class Server:
           task(self._task)
         except dss.auxiliaries.exception.AbortTask:
           logging.warning('abort current task')
+          self._hexa.abort_task = False
         except dss.auxiliaries.exception.Error:
           logging.critical(traceback.format_exc())
 
@@ -1175,6 +1176,7 @@ class Server:
         task = self._commands[fcn]['task']
 
         #we need to try the request prior to executing the task. All nack reasons are handled in the requests
+        start_task = False
         if task:
           priority = self._commands[fcn]['priority']
           # Nack reasons for all tasks with low priority
@@ -1185,12 +1187,7 @@ class Server:
             # Test request
             answer = request(msg)
             if dss.auxiliaries.zmq.is_ack(answer):
-              if self._task_event.is_set():
-                self._hexa.abort_task = True
-                self._task_event.clear()
-              self._task = msg
-              self._task_priority = priority
-              self._task_event.set()
+              start_task = True
         else:
           # simple requests are always allowed
           answer = request(msg)
@@ -1201,6 +1198,15 @@ class Server:
 
       answer = json.dumps(answer)
       self._serv_socket.send_json(answer)
+      if start_task:
+        if self._task_event.is_set():
+          self._hexa.abort_task = True
+          #wait until task is aborted
+          while self._hexa.abort_task:
+            time.sleep(0.01)
+        self._task = msg
+        self._task_priority = priority
+        self._task_event.set()
 
       if fcn != 'heart_beat':
         self._logger.info("Replied: %s", answer)

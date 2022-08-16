@@ -236,8 +236,8 @@ class UsspClientLib:
   Return parameters:
   "status" - "activated", "invalid ID"
   '''
-  def activate_plan(self, plan_id, time_unitl_withdrawn=None):
-    answer = self._ussp_client.activate_plan(plan_id, time_unitl_withdrawn)
+  def activate_plan(self, plan_id, time_until_withdrawn=None):
+    answer = self._ussp_client.activate_plan(plan_id, time_until_withdrawn)
     if "reply" not in answer \
       or answer["reply"] == "error":
       self._logger.warning(answer)

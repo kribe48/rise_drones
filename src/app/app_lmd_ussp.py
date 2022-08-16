@@ -131,7 +131,7 @@ class AppLmd():
     self.ussp_req_port = dss.auxiliaries.config.config['app_lmd_ussp']['ussp_req_port']
     self.ussp_pub_port = dss.auxiliaries.config.config['app_lmd_ussp']['ussp_pub_port']
     self.ussp_sub_port = dss.auxiliaries.config.config['app_lmd_ussp']['ussp_sub_port']
-    _logger.info(f'App LMD conneting to USSP: {self.ussp_ip}')
+    _logger.info(f'App LMD connecting to USSP: {self.ussp_ip}')
     self.ussp = dss.client.UsspClientLib(app_id, _context)
     self.ussp.connect(self.ussp_ip, self.ussp_req_port, self.ussp_pub_port, self.ussp_sub_port)
     self.application_state = "idle"

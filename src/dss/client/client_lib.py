@@ -321,7 +321,6 @@ class Client:
     current_height = start_height
     while current_height < final_height * 0.9:
       time.sleep(1.0)
-      self.raise_if_aborted()
       try:
         current_height = self.get_height()
       except dss.auxiliaries.exception.Nack:

@@ -176,7 +176,7 @@ class Hexacopter:
 
     # Control parameters
     self.min_wp_speed = 0.1                             # From documentation
-    self.lookahead_dist = 20.0
+    self.lookahead_dist = 30.0
 
     # connect to dronekit
     connect = "tcp:" + connect
@@ -741,7 +741,7 @@ class Hexacopter:
         #time.sleep(0.25)
         # USE ARDUPILOT POSITION CONTROLLER
         self.send_goto_lla(lookahead_wp)
-        time.sleep(1.0)
+        time.sleep(0.1)
         self.raise_if_aborted()
 
   def task_gogo(self, next_wp):

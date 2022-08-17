@@ -490,6 +490,9 @@ class Client:
   def set_init_point(self, heading_ref):
     self._dss.set_init_point(heading_ref)
 
+  def set_vel_BODY(self, x, y, z, yaw_rate):
+    self._dss.set_vel_BODY(x, y, z, yaw_rate)
+
   def reset_dss_srtl(self):
     self._dss.reset_dss_srtl()
 

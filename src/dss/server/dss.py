@@ -227,7 +227,7 @@ class Server:
   def from_owner(self, msg)->bool:
     return msg['id'] == self._owner
 
-  # Nav not ready helper
+  # Nav ready helper
   def nav_ready(self):
     return self._hexa.vehicle.is_armable
 
@@ -343,7 +343,6 @@ class Server:
       self._hexa.reset_dss_srtl()
     return answer
 
-
   def _request_arm_take_off(self, msg) -> dict:
     fcn = dss.auxiliaries.zmq.get_fcn(msg)
     to_alt = msg['height']
@@ -355,7 +354,7 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
     elif self._hexa.get_nsat() < 8:
       answer = dss.auxiliaries.zmq.nack(fcn, 'Less than 8 satellites')
-    elif self._hexa.is_armed(): # Actually it is the armed state that is tested
+    elif self._hexa.flying_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is flying')
     elif not 2 <= to_alt <= 40:
       answer = dss.auxiliaries.zmq.nack(fcn, 'Height is out of limits')
@@ -374,7 +373,7 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, descr)
     elif self._in_controls != 'APPLICATION':
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
-    elif not self._hexa.is_armed(): # Actually it is the armed state that is tested
+    elif not self._hexa.flying_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
     # Accept
     else:
@@ -389,7 +388,7 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, descr)
     elif self._in_controls != 'APPLICATION':
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
-    elif not self._hexa.is_flying(): # Actually it is the armed state that is tested
+    elif not self._hexa.flying_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
     elif False: # Think this nack reason is related to DJI-DSS.
       answer = dss.auxiliaries.zmq.nack(fcn, 'RTL failed to engage, try again')
@@ -408,7 +407,7 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, descr)
     elif self._in_controls != 'APPLICATION':
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
-    elif not self._hexa.is_flying(): # Actually it is the armed state that is tested
+    elif not self._hexa.flying_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
     elif not 0 <= hover_time <= 300:
       answer = dss.auxiliaries.zmq.nack(fcn, 'Hover_time is out of limits')
@@ -431,11 +430,20 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, descr)
     elif self._in_controls != 'APPLICATION':
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
-    elif not self._hexa.is_flying(): # Actually it is the armed state that is tested
+    elif not self._hexa.flying_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
+    elif self._task_event.is_set() and self._task_priority == MAX_PRIORITY:
+      answer = dss.auxiliaries.zmq.nack(fcn, 'A task with highest priority is running')
     # Accept
     else:
       answer = dss.auxiliaries.zmq.ack(fcn)
+      if self._task_event.is_set():
+        self._hexa.abort_task = True
+        #wait until task is aborted or max_time reached
+        max_wait = 0
+        while self._hexa.abort_task and max_wait < 10:
+            max_wait += 1
+            time.sleep(0.01)
       self._hexa.send_body_velocity(vel_x, vel_y, vel_z)
       self._hexa.send_yaw_rate(yaw_rate)
     return answer
@@ -1202,7 +1210,9 @@ class Server:
         if self._task_event.is_set():
           self._hexa.abort_task = True
           #wait until task is aborted
-          while self._hexa.abort_task:
+          max_wait = 0
+          while self._hexa.abort_task and max_wait < 10:
+            max_wait += 1
             time.sleep(0.01)
         self._task = msg
         self._task_priority = priority

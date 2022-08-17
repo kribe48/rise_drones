@@ -1,8 +1,6 @@
 '''
-Drone Safety Service *API*
-
-This class is in charge of the socket amd the actual API as described
-in documentation.
+USSP client lib
+This class contains convenience functions for communicating with the USSP.
 '''
 import datetime
 import logging

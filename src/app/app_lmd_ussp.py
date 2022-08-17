@@ -374,17 +374,6 @@ class AppLmd():
       self.drone.set_geofence(self.height_min, self.height_max, self.delta_r_max)
     self.drone.upload_mission_LLA(waypoints)
 
-  def hover_at_current_position(self):
-    # Send a waypoint mission to hover at the latest received position.
-    waypoints = {}
-    self.drone_lla_lock.acquire()
-    waypoints["id0"] = {
-        "lat" : self.drone_data["pos"].lat, "lon": self.drone_data["pos"].lon, "alt": self.drone_data["pos"].alt, "alt_type": "amsl", "heading": "course", "speed": 5.0
-      }
-    self.drone_lla_lock.release()
-    self.drone.upload_mission_LLA(waypoints)
-    self.drone.gogo()
-
   def launch_drone(self, takeoff_height, reset_dss_srtl=True):
     self.drone.await_controls()
     self.drone.arm_and_takeoff(takeoff_height)
@@ -426,7 +415,6 @@ class AppLmd():
         # Mission is completed
         break
 
-
 #--------------------------------------------------------------------#
 # Main function
   def main(self):
@@ -453,6 +441,8 @@ class AppLmd():
       self.application_state = "executing"
       for mission in self.missions:
         self.initialize_waypoints(mission["wp_mission"], reset_geofence)
+        # Only update geofence once
+        reset_geofence = False
         #Wait for takeoff time
         while datetime.datetime.utcnow() + datetime.timedelta(seconds=10) < mission["takeoff_time"]:
           _logger.info(f"Waiting to start mission execution, time remaining: {mission['takeoff_time']-datetime.datetime.utcnow()}")
@@ -462,11 +452,14 @@ class AppLmd():
         # Launch drone
         if mission["status"] == "pending":
           self.launch_drone(mission["takeoff_height"], reset_dss_srtl)
+          #Only reset dss srtl once
+          reset_dss_srtl = False
         # Fly to waypoints
         if not self.plan_withdrawn:
           self.fly_waypoints()
         if self.plan_withdrawn:
-          self.hover_at_current_position()
+          #Make the drone hover
+          self.drone.set_vel_BODY(0,0,0,0)
           mission["status"] = "running"
           self.application_state = "planning"
           self.ussp.end_plan(mission["plan ID"])
@@ -489,16 +482,13 @@ class AppLmd():
         elif mission["type"] == "return":
           self.application_state = "idle"
           return_reached = True
-        # Do not update dss srtl and geofence
-        reset_dss_srtl = False
-        reset_geofence = False
 
 
 
 #--------------------------------------------------------------------#
 def _main():
   # parse command-line arguments
-  parser = argparse.ArgumentParser(description='APP "app_noise"', allow_abbrev=False, add_help=False)
+  parser = argparse.ArgumentParser(description='APP "app_lmd_ussp"', allow_abbrev=False, add_help=False)
   parser.add_argument('-h', '--help', action='help', help=argparse.SUPPRESS)
   parser.add_argument('--app_ip', type=str, help='ip of the app', required=True)
   parser.add_argument('--id', type=str, default=None, help='id of this app_noise instance if started by crm')
@@ -516,7 +506,6 @@ def _main():
   dss.auxiliaries.logging.configure('app_lmd_ussp', stdout=args.stdout, rotating=True, loglevel=args.log, subdir=subnet)
 
   # Create the AppLMD class
-
   try:
     app = AppLmd(args.app_ip, args.id, args.crm, args.mission, args.startwp)
   except dss.auxiliaries.exception.NoAnswer:

@@ -374,6 +374,17 @@ class AppLmd():
       self.drone.set_geofence(self.height_min, self.height_max, self.delta_r_max)
     self.drone.upload_mission_LLA(waypoints)
 
+  def hover_at_current_position(self):
+    # Send a waypoint mission to hover at the latest received position.
+    waypoints = {}
+    self.drone_lla_lock.acquire()
+    waypoints["id0"] = {
+        "lat" : self.drone_data["pos"].lat, "lon": self.drone_data["pos"].lon, "alt": self.drone_data["pos"].alt, "alt_type": "amsl", "heading": "course", "speed": 5.0
+      }
+    self.drone_lla_lock.release()
+    self.drone.upload_mission_LLA(waypoints)
+    self.drone.gogo()
+
   def launch_drone(self, takeoff_height, reset_dss_srtl=True):
     self.drone.await_controls()
     self.drone.arm_and_takeoff(takeoff_height)
@@ -452,8 +463,10 @@ class AppLmd():
         if mission["status"] == "pending":
           self.launch_drone(mission["takeoff_height"], reset_dss_srtl)
         # Fly to waypoints
-        self.fly_waypoints()
+        if not self.plan_withdrawn:
+          self.fly_waypoints()
         if self.plan_withdrawn:
+          self.hover_at_current_position()
           mission["status"] = "running"
           self.application_state = "planning"
           self.ussp.end_plan(mission["plan ID"])

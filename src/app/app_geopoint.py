@@ -301,7 +301,7 @@ class AppGeo():
         current_fcn = self._input_commands[user_input.lower()]['fcn']
         current_fcn()
       else:
-        _logger.info("Unknown command. Type help to list available commands")
+        _logger.info("Unknown command. Type h to list available commands")
 
 #--------------------------------------------------------------------#
 def _main():

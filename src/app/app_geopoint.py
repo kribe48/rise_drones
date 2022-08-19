@@ -82,11 +82,14 @@ class AppGeo():
     _logger.info('App %s listening on %s:%s', self.crm.app_id, self._app_socket.ip, self._app_socket.port)
     _logger.info('App_lmd registered with CRM: %s', self.crm.app_id)
 
-    self._input_commands = {'connect':    {'description': 'Connect to a drone', 'fcn': self.connect_to_drone},
-                            'store':      {'description': 'Store geopoint at current location', 'fcn': self.store_geopoint},
-                            'gnss_state': {'description': 'Print current gnss_state', 'fcn': self.display_gnss_state},
-                            'quit'      : {'description': 'Quit program', 'fcn': self.quit_application},
-                            'help'      : {'description': 'List available commands', 'fcn': self.display_help}}
+    self._input_commands = {'1':    {'description': 'Connect to a drone', 'fcn': self.connect_to_drone},
+                            '2':      {'description': 'Store geopoint at current location', 'fcn': self.store_geopoint},
+                            '3': {'description': 'Print current gnss_state', 'fcn': self.display_gnss_state},
+                            '4': {'description': 'Print current gnss_state threshold', 'fcn': self.display_gnss_threshold},
+                            '5': {'description': 'Increase current gnss_state threshold', 'fcn': self.increase_gnss_threshold},
+                            '6': {'description': 'Decrease current gnss_state threshold', 'fcn': self.decrease_gnss_threshold},
+                            'q'      : {'description': 'Quit program', 'fcn': self.quit_application},
+                            'h'      : {'description': 'List available commands', 'fcn': self.display_help}}
 
     self._gnss_state_threshold = 6
     self.drone_received = False
@@ -244,6 +247,19 @@ class AppGeo():
     else:
       _logger.info("No LLA stream received yet")
 #--------------------------------------------------------------------#
+  def display_gnss_threshold(self):
+    _logger.info(f"GNSS state threshold : {self._gnss_state_threshold}")
+
+#--------------------------------------------------------------------#
+  def increase_gnss_threshold(self):
+    self._gnss_state_threshold = min(6, self._gnss_state_threshold+1)
+    _logger.info(f"GNSS state threshold : {self._gnss_state_threshold}")
+
+#--------------------------------------------------------------------#
+  def decrease_gnss_threshold(self):
+    self._gnss_state_threshold = max(3, self._gnss_state_threshold-1)
+    _logger.info(f"GNSS state threshold : {self._gnss_state_threshold}")
+#--------------------------------------------------------------------#
   def display_help(self):
     _logger.info("***The available commands***")
     for key, value in self._input_commands.items():
@@ -266,10 +282,11 @@ class AppGeo():
       if gnss_state >= self._gnss_state_threshold:
         #Store LLA at POI.json
         poi = {"lat": drone_data["lat"], "lon": drone_data["lon"], "alt": drone_data["alt"], "gnss_state": gnss_state}
-        poi_fp = Path.cwd().joinpath('poi.txt')
-        with open(poi_fp, 'w') as file:
+        fname = input("Enter waypoint name: ")
+        wp_fp = Path.cwd().joinpath(fname+'.txt')
+        with open(wp_fp, 'w') as file:
           json.dump(poi, file, indent=2)
-        _logger.info(f"Point of interest stored at {poi_fp}")
+        _logger.info(f"Waypoint stored at {wp_fp}")
       else:
         _logger.info(f"GNSS state not high enough. Current state: {gnss_state}")
     else:

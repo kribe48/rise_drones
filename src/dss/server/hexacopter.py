@@ -176,7 +176,7 @@ class Hexacopter:
 
     # Control parameters
     self.min_wp_speed = 0.1                             # From documentation
-    self.lookahead_dist = 20.0
+    self.lookahead_dist = 40.0
 
     # connect to dronekit
     connect = "tcp:" + connect
@@ -719,8 +719,6 @@ class Hexacopter:
     # Set heading according to what is specified in the waypoint
     self.send_condition_yaw(next_wp)
     waypoint_reached = False
-    # ONLY WHEN USING ARDUPILOT POSITION CONTROLLER - Set commanded speed
-    self.send_cmd_speed(next_wp.speed)
     while not waypoint_reached :
       # While waypopint not reached- steer towards next wp based on current location
       curr_location = self.get_position_lla()
@@ -741,7 +739,9 @@ class Hexacopter:
         #time.sleep(0.25)
         # USE ARDUPILOT POSITION CONTROLLER
         self.send_goto_lla(lookahead_wp)
-        time.sleep(1.0)
+        self.send_cmd_speed(next_wp.speed)
+        time.sleep(0.1)
+        self.raise_if_aborted()
 
   def task_gogo(self, next_wp):
     self._status_msg = 'gogo'

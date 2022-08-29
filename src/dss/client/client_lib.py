@@ -321,7 +321,6 @@ class Client:
     current_height = start_height
     while current_height < final_height * 0.9:
       time.sleep(1.0)
-      self.raise_if_aborted()
       try:
         current_height = self.get_height()
       except dss.auxiliaries.exception.Nack:
@@ -490,6 +489,9 @@ class Client:
 
   def set_init_point(self, heading_ref):
     self._dss.set_init_point(heading_ref)
+
+  def set_vel_BODY(self, x, y, z, yaw_rate):
+    self._dss.set_vel_BODY(x, y, z, yaw_rate)
 
   def reset_dss_srtl(self):
     self._dss.reset_dss_srtl()

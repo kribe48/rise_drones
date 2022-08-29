@@ -28,6 +28,8 @@ __version__ = '1.1.0'
 __copyright__ = 'Copyright (c) 2019-2022, RISE'
 __status__ = 'development'
 
+MAX_PRIORITY = 10
+
 class Server:
   '''Drone Safety Service Server - new implementation'''
 
@@ -120,11 +122,11 @@ class Server:
     # 'task' points to an optional asynchronous task call-back
 
     # Functions in same order as documentation
-    self._commands = {'arm_take_off':       {'request': self._request_arm_take_off,       'task': self._task_arm_take_off},
+    self._commands = {'arm_take_off':       {'request': self._request_arm_take_off,       'task': self._task_arm_take_off, 'priority': MAX_PRIORITY},
                       'data_stream':        {'request': self._request_data_stream,        'task': None},
-                      'disconnect':         {'request': self._request_disconnect,         'task': self._task_disconnect},
-                      'dss_srtl':           {'request': self._request_dss_srtl,           'task': self._task_dss_srtl},
-                      'follow_stream':      {'request': self._request_follow_stream,      'task': self._task_follow_stream},
+                      'disconnect':         {'request': self._request_disconnect,         'task': self._task_disconnect, 'priority': 1},
+                      'dss_srtl':           {'request': self._request_dss_srtl,           'task': self._task_dss_srtl, 'priority': MAX_PRIORITY},
+                      'follow_stream':      {'request': self._request_follow_stream,      'task': self._task_follow_stream, 'priority': 1},
                       'get_armed':          {'request': self._request_get_armed,          'task': None},
                       'get_currentWP':      {'request': self._request_get_currentWP,      'task': None}, # Not implemented
                       'get_flightmode':     {'request': self._request_get_flightmode,     'task': None},
@@ -134,16 +136,16 @@ class Server:
                       'get_owner':          {'request': self._request_get_owner,          'task': None},
                       'get_posD':           {'request': self._request_get_posD,           'task': None},
                       'get_PWM':            {'request': self._request_get_PWM,            'task': None},
-                      'gogo':               {'request': self._request_gogo,               'task': self._task_gogo}, # Not fully implemented
+                      'gogo':               {'request': self._request_gogo,               'task': self._task_gogo, 'priority': 1}, # Not fully implemented
                       'heart_beat':         {'request': self._request_heart_beat,         'task': None},
-                      'land':               {'request': self._request_land,               'task': self._task_land},
+                      'land':               {'request': self._request_land,               'task': self._task_land, 'priority': MAX_PRIORITY},
                       'photo':              {'request': self._request_photo,              'task': None}, # Not implemented
                       'reset_dss_srtl':     {'request': self._request_reset_dss_srtl,     'task': None},
-                      'rtl':                {'request': self._request_rtl,                'task': self._task_rtl},
+                      'rtl':                {'request': self._request_rtl,                'task': self._task_rtl, 'priority': MAX_PRIORITY},
                       'set_default_speed':  {'request': self._request_set_default_speed,  'task': None}, # Not implemented
                       'set_geofence':       {'request': self._request_set_geofence,       'task': None},
                       'set_gimbal':         {'request': self._request_set_gimbal,         'task': None},
-                      'set_gripper':        {'request': self._request_set_gripper,        'task': self._task_set_gripper},
+                      'set_gripper':        {'request': self._request_set_gripper,        'task': self._task_set_gripper, 'priority': 1},
                       'set_heading':        {'request': self._request_set_heading,        'task': None},
                       'set_init_point':     {'request': self._request_set_init_point,     'task': None},
                       'set_owner':          {'request': self._request_set_owner,          'task': None},
@@ -159,6 +161,7 @@ class Server:
     # create initial task
     self._task = {'fcn': ''}
     self._task_event = threading.Event()
+    self._task_priority = 0
 
     self._alive = True
     self._in_controls = 'PILOT'
@@ -224,7 +227,7 @@ class Server:
   def from_owner(self, msg)->bool:
     return msg['id'] == self._owner
 
-  # Nav not ready helper
+  # Nav ready helper
   def nav_ready(self):
     return self._hexa.vehicle.is_armable
 
@@ -340,7 +343,6 @@ class Server:
       self._hexa.reset_dss_srtl()
     return answer
 
-
   def _request_arm_take_off(self, msg) -> dict:
     fcn = dss.auxiliaries.zmq.get_fcn(msg)
     to_alt = msg['height']
@@ -352,7 +354,7 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
     elif self._hexa.get_nsat() < 8:
       answer = dss.auxiliaries.zmq.nack(fcn, 'Less than 8 satellites')
-    elif self._hexa.is_armed(): # Actually it is the armed state that is tested
+    elif self._hexa.flying_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is flying')
     elif not 2 <= to_alt <= 40:
       answer = dss.auxiliaries.zmq.nack(fcn, 'Height is out of limits')
@@ -371,7 +373,7 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, descr)
     elif self._in_controls != 'APPLICATION':
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
-    elif not self._hexa.is_armed(): # Actually it is the armed state that is tested
+    elif not self._hexa.flying_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
     # Accept
     else:
@@ -386,7 +388,7 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, descr)
     elif self._in_controls != 'APPLICATION':
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
-    elif not self._hexa.is_flying(): # Actually it is the armed state that is tested
+    elif not self._hexa.flying_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
     elif False: # Think this nack reason is related to DJI-DSS.
       answer = dss.auxiliaries.zmq.nack(fcn, 'RTL failed to engage, try again')
@@ -405,7 +407,7 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, descr)
     elif self._in_controls != 'APPLICATION':
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
-    elif not self._hexa.is_flying(): # Actually it is the armed state that is tested
+    elif not self._hexa.flying_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
     elif not 0 <= hover_time <= 300:
       answer = dss.auxiliaries.zmq.nack(fcn, 'Hover_time is out of limits')
@@ -428,11 +430,20 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, descr)
     elif self._in_controls != 'APPLICATION':
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
-    elif not self._hexa.is_flying(): # Actually it is the armed state that is tested
+    elif not self._hexa.flying_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
+    elif self._task_event.is_set() and self._task_priority == MAX_PRIORITY:
+      answer = dss.auxiliaries.zmq.nack(fcn, 'A task with highest priority is running')
     # Accept
     else:
       answer = dss.auxiliaries.zmq.ack(fcn)
+      if self._task_event.is_set():
+        self._hexa.abort_task = True
+        #wait until task is aborted or max_time reached
+        max_wait = 0
+        while self._hexa.abort_task and max_wait < 10:
+            max_wait += 1
+            time.sleep(0.01)
       self._hexa.send_body_velocity(vel_x, vel_y, vel_z)
       self._hexa.send_yaw_rate(yaw_rate)
     return answer
@@ -933,6 +944,7 @@ class Server:
           task(self._task)
         except dss.auxiliaries.exception.AbortTask:
           logging.warning('abort current task')
+          self._hexa.abort_task = False
         except dss.auxiliaries.exception.Error:
           logging.critical(traceback.format_exc())
 
@@ -1171,18 +1183,19 @@ class Server:
         request = self._commands[fcn]['request']
         task = self._commands[fcn]['task']
 
-        # TODO, we need to try the request prior to executing the task. All nack reasons are handled in the requests
+        #we need to try the request prior to executing the task. All nack reasons are handled in the requests
+        start_task = False
         if task:
-          # Nack reasons for all tasks
-          if self._task_event.is_set():
-            answer = {'fcn': 'nack', 'call': fcn, 'description': 'another task is still running'}
+          priority = self._commands[fcn]['priority']
+          # Nack reasons for all tasks with low priority
+          if self._task_event.is_set() and (self._task_priority == MAX_PRIORITY or priority < self._task_priority):
+              answer = {'fcn': 'nack', 'call': fcn, 'description': 'another task with higher priority is still running'}
           # Accept task
           else:
             # Test request
             answer = request(msg)
             if dss.auxiliaries.zmq.is_ack(answer):
-              self._task = msg
-              self._task_event.set()
+              start_task = True
         else:
           # simple requests are always allowed
           answer = request(msg)
@@ -1193,6 +1206,17 @@ class Server:
 
       answer = json.dumps(answer)
       self._serv_socket.send_json(answer)
+      if start_task:
+        if self._task_event.is_set():
+          self._hexa.abort_task = True
+          #wait until task is aborted
+          max_wait = 0
+          while self._hexa.abort_task and max_wait < 10:
+            max_wait += 1
+            time.sleep(0.01)
+        self._task = msg
+        self._task_priority = priority
+        self._task_event.set()
 
       if fcn != 'heart_beat':
         self._logger.info("Replied: %s", answer)

@@ -74,16 +74,16 @@ class AppLmd():
 
     # load mission from file
     with open(mission, encoding='utf-8') as handle:
-      self.wps_to_visit = json.load(handle)
-      if "source_file" in self.wps_to_visit:
-        self.wps_to_visit.pop("source_file")
+      self.input_missions = json.load(handle)
+      if "source_file" in self.input_missions:
+        self.input_missions.pop("source_file")
 
 
-    for wp in self.wps_to_visit.values():
-      wp['status'] = "pending"
+    for mission in self.input_missions.values():
+      mission['status'] = "pending"
     self.start_wp = start_wp
     # Missions
-    self.missions = []
+    self.ussp_missions = []
     #geofence parameters
     self.delta_r_max = dss.auxiliaries.config.config['app_lmd_ussp']['delta_r_max']
     self.height_max = dss.auxiliaries.config.config['app_lmd_ussp']['height_max']
@@ -291,34 +291,48 @@ class AppLmd():
       except:
         pass
 
-  def update_wps_to_visit(self):
-    self.wps_to_visit = {}
-    for mission in self.missions:
-      #Cancel pending missions..
+  def update_input_missions(self):
+    old_input_missions = copy.deepcopy(self.input_missions)
+    self.input_missions = {}
+    for mission in self.ussp_missions:
+      #Cancel pending missions and add to input mission list
       if mission["status"] == "pending":
         self.ussp.cancel_plan(mission["plan ID"])
+        self.input_missions[mission["type"]] = old_input_missions[mission["type"]]
       #Add all waypoints associated to a mission that is not ended
-      if mission["status"] != "ended":
-        #Add the end position to the list of wps to visit
-        self.wps_to_visit[mission["type"]] = {"lat": mission["final pos"].lat, "lon": mission["final pos"].lon, "alt": mission["final pos"].alt, "status": mission["status"]}
+      elif mission["status"] == "running":
+        #Find what waypoints that should be kept in the plan (not visited yet)
+        new_input_mission = {}
+        old_input_mission = old_input_missions[mission["type"]]
+        current_wp = 0
+        for wp_name, wp in old_input_mission.items():
+          if current_wp < self.wp_in_old_list:
+            current_wp += 1
+          else:
+            new_input_mission[wp_name] = wp
+        new_input_mission["status"] = "running"
+        self.input_missions[mission["type"]] = new_input_mission
     #Reset missions list and plan withdrawn flag
     self.plan_withdrawn = False
-    self.missions = {}
+    self.ussp_missions = {}
   # Generate missions based on positions to visit
   def generate_ussp_lmd_missions(self):
     # Request flight authorizations from the USSP
-    takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=1)
+    takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
     current_position = copy.deepcopy(self.drone_data["pos"])
-    for wp_type, waypoint in self.wps_to_visit.items():
-      position = Waypoint(waypoint["lat"], waypoint["lon"], waypoint["alt"])
+    for mission_type, mission in self.input_missions.items():
+      input_positions = [current_position]
+      for wp_name, wp in mission.items():
+        if wp_name != "status":
+          input_positions.append(Waypoint(wp["lat"], wp["lon"], current_position.alt) )
       use_altitude = False
       #Check if the drone is currently in the air (plan withdrawn received)
-      if waypoint["status"] == "running":
+      if mission["status"] == "running":
         use_altitude = True
+        # Modify the last waypoint to be on the ground
+        input_positions[-1].alt = self.ussp.query_ground_height(input_positions[-1].lat, input_positions[-1].lon)
         takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=10)
-        position.alt = self.ussp.query_ground_height(position.lat, position.lon)
-      positions = [current_position, position]
-      (plan_id, delay) = self.ussp.request_plan(self.operator_id, self.uas_id, epsg=4979, use_altitude=use_altitude, positions=positions, takeoff_time=takeoff_time, speed=self.horizontal_speed, max_speed=15.0, ascend_rate=2.0, descend_rate=1.0)
+      (plan_id, delay) = self.ussp.request_plan(self.operator_id, self.uas_id, epsg=4979, use_altitude=use_altitude, positions=input_positions, takeoff_time=takeoff_time, speed=self.horizontal_speed, max_speed=15.0, ascend_rate=2.0, descend_rate=1.0)
       if plan_id is None or delay is None:
         raise dss.auxiliaries.exception.Error
       time.sleep(delay)
@@ -332,20 +346,33 @@ class AppLmd():
       #Convert to internal representation
       wp_mission = self.ussp.transform_plan(plan, use_altitude)
       #save mission
-      mission = {}
-      mission["final pos"] = position
-      mission["wp_mission"] = wp_mission
-      mission["takeoff_time"] = datetime.datetime.fromisoformat(plan[0]["time"])
-      mission["plan ID"] = plan_id
-      mission["type"] = wp_type
-      mission["status"] = waypoint["status"]
-      if mission["status"] == "pending":
-        mission["takeoff_height"] = min(plan[1]["position"][2] - plan[0]["position"][2], 30.0)
-        _logger.info(f"takeoff_height: {mission['takeoff_height']}, wp_mission : {wp_mission}")
-      self.missions.append(mission)
+      mission_ussp = {}
+      mission_ussp["wp_mission"] = wp_mission
+      mission_ussp["transform_current_wp"] = self.map_input_to_ussp_wps(mission, wp_mission)
+      mission_ussp["takeoff_time"] = datetime.datetime.fromisoformat(plan[0]["time"])
+      mission_ussp["plan ID"] = plan_id
+      mission_ussp["type"] = mission_type
+      mission_ussp["status"] = mission["status"]
+      if mission_ussp["status"] == "pending":
+        mission_ussp["takeoff_height"] = min(plan[1]["position"][2] - plan[0]["position"][2], 30.0)
+        _logger.info(f"takeoff_height: {mission_ussp['takeoff_height']}, wp_mission : {wp_mission}")
+      self.ussp_missions.append(mission_ussp)
       #Update takeoff time
-      current_position = position
+      current_position = Waypoint(input_positions[-1].lat, input_positions[-1].lon, input_positions[-1].alt)
       takeoff_time = datetime.datetime.fromisoformat(plan[-1]["time"]) + datetime.timedelta(seconds=plan[-1]["time margin"]) + datetime.timedelta(seconds=10)
+
+  @staticmethod
+  def map_input_to_ussp_wps(mission, ussp_wp_mission):
+    input_mapper = []
+    for ussp_wp in ussp_wp_mission.values():
+      wp_mapped = 0
+      for wp_name, wp in mission.items():
+        if wp_name != "status":
+          if abs(wp["lat"]-ussp_wp["lat"]) < 1e-6 and abs(wp["lon"] - ussp_wp["lon"]) < 1e-6:
+            break
+          wp_mapped += 1
+      input_mapper.append(wp_mapped)
+    return input_mapper
 
 #------------------------TASKS----------------------------------------#
   def connect_to_drone(self, capabilities):
@@ -439,13 +466,13 @@ class AppLmd():
       # Generate USSP missions
       self.generate_ussp_lmd_missions()
       self.application_state = "executing"
-      for mission in self.missions:
+      for mission in self.ussp_missions:
         self.initialize_waypoints(mission["wp_mission"], reset_geofence)
         # Only update geofence once
         reset_geofence = False
         #Wait for takeoff time
         while datetime.datetime.utcnow() + datetime.timedelta(seconds=10) < mission["takeoff_time"]:
-          _logger.info(f"Waiting to start mission execution, time remaining: {mission['takeoff_time']-datetime.datetime.utcnow()}")
+          _logger.info(f"Waiting to start mission execution, time remaining: {mission['takeoff_time']-datetime.datetime.utcnow()-datetime.timedelta(seconds=10)}")
           time.sleep(0.5)
         # activate mission
         self.ussp.activate_plan(mission["plan ID"])
@@ -463,7 +490,9 @@ class AppLmd():
           mission["status"] = "running"
           self.application_state = "planning"
           self.ussp.end_plan(mission["plan ID"])
-          self.update_wps_to_visit()
+          (current_wp, _) = self.drone.get_currentWP()
+          self.wp_in_old_list = mission["transform_current_wp"][current_wp]
+          self.update_input_missions()
           break
         #wait for reaching waypoint
         time.sleep(1.0)

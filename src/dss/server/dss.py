@@ -33,7 +33,7 @@ MAX_PRIORITY = 10
 class Server:
   '''Drone Safety Service Server - new implementation'''
 
-  def __init__(self, dss_ip, dss_id='', drone: str='', baud=921600, with_gcs=False, gcs_address=None, rangefinder=False, autogain=False, midstick_check=True, clearance_check=True, photo=False, crm: str='', description='crm_dss', die_gracefully: bool=False):
+  def __init__(self, dss_ip, dss_id='', drone: str='', baud=921600, with_gcs=False, gcs_address=None, rangefinder=False, autogain=False, midstick_check=True, clearance_check=True, photo=False, crm: str='', capabilities=None, description='crm_dss', die_gracefully: bool=False):
     if die_gracefully:
       # source: https://stackoverflow.com/a/31464349
       import signal
@@ -189,7 +189,7 @@ class Server:
 
     # register dss
     if crm:
-      self._capabilities = config['DSS']['Capabilities']
+      self._capabilities = capabilities
       self._crm = dss.client.CRM(self._zmq_context, crm, app_name='crm_dss.py', desc=description, app_id=self._dss_id)
       #register and start sending heartbeat to the CRM
       self._logger.info(f"registering to CRM with capabilities: {self._capabilities}")

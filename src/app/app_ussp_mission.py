@@ -451,6 +451,9 @@ class AppUsspMission():
     elif phase == "post takeoff":
       if route_type == 'camera route':
         self.drone.set_gimbal(0,90,0)
+    elif phase == "pre land":
+      if route_type == 'camera route':
+        self.drone.set_gimbal(0,0,0)
     elif phase == "landed":
       if route_type == "drop off":
         self.drone.unload_package()
@@ -516,6 +519,7 @@ class AppUsspMission():
         #Await landing clearance?
         self.await_clearance_landing()
         #Land
+        self.check_action("pre land", route["type"])
         self.drone.land()
         # End plan
         self.ussp.end_plan(route["plan ID"])

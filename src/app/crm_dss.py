@@ -20,6 +20,7 @@ def _main():
   parser = argparse.ArgumentParser(description='DSS Server', allow_abbrev=False, add_help=False)
   parser.add_argument('-h', '--help', action='help', help=argparse.SUPPRESS)
   parser.add_argument('--crm', type=str, help='<ip>:<port> of crm', required=True)
+  parser.add_argument('--capabilities', type=str, default=None, nargs='*', required=False)
   parser.add_argument('--drone', type=str, help='<ip>:<port> of drone/mavproxy', required=True)
   parser.add_argument('--dss_ip', type=str,help='ip of the crm_dss', required = True)
   #parser.add_argument('--owner', type=str, help='id of the connected TYRAmote instance', required=True)
@@ -42,7 +43,7 @@ def _main():
 
   # start dss
   try:
-    server = Server(dss_ip=args.dss_ip, dss_id=args.dss_id, drone=args.drone, midstick_check=not args.without_midstick_check, clearance_check=not args.without_clearance_check, crm=args.crm, description=args.descr, die_gracefully=True)
+    server = Server(dss_ip=args.dss_ip, dss_id=args.dss_id, drone=args.drone, midstick_check=not args.without_midstick_check, clearance_check=not args.without_clearance_check, crm=args.crm, capabilities=args.capabilities, description=args.descr, die_gracefully=True)
   except dss.auxiliaries.exception.Error as error:
     logging.critical(str(error))
     sys.exit()

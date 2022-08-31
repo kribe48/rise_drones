@@ -382,7 +382,7 @@ class CRM:
     dss_id = '{type}{index:03d}'.format(type='dss', index=self._nextIndex)
     self._nextIndex += 1
     self._clients[dss_id] = {'name': 'crm_dss.py', 'desc': '', 'type': 'dss', 'owner': 'crm', 'ip': '', 'port': '', 'timestamp': self._now}
-    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+88}', f'--dss_ip={self._ip}', '--descr=dss->SITL...88', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'C0', 'RTK', 'LMD', 'RGB', 'VIDEO')
+    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+88}', f'--dss_ip={self._ip}', '--descr=dss->port 88 [SIM]', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'C0', 'RTK', 'LMD', 'RGB', 'VIDEO')
     return dss.auxiliaries.zmq.ack(fcn)
 
   def _request_launch_sitl(self, msg: dict) -> dict:
@@ -411,17 +411,17 @@ class CRM:
     dss_id = '{type}{index:03d}'.format(type='dss', index=self._nextIndex)
     self._nextIndex += 1
     self._clients[dss_id] = {'name': 'crm_dss.py', 'desc': '', 'type': 'dss', 'owner': 'crm', 'ip': '', 'port': '', 'timestamp': self._now}
-    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+82}', f'--dss_ip={self._ip}', '--descr=dss->SITL...82', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'C0', 'RGB')
+    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+82}', f'--dss_ip={self._ip}', '--descr=dss->port 82 [SIM]', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'C0', 'RGB')
 
     dss_id = '{type}{index:03d}'.format(type='dss', index=self._nextIndex)
     self._nextIndex += 1
     self._clients[dss_id] = {'name': 'crm_dss.py', 'desc': '', 'type': 'dss', 'owner': 'crm', 'ip': '', 'port': '', 'timestamp': self._now}
-    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+84}', f'--dss_ip={self._ip}', '--descr=dss->SITL...84', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'RTK',  'RGB', 'VIDEO')
+    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+84}', f'--dss_ip={self._ip}', '--descr=dss->port 84 [SIM]', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'RTK',  'RGB', 'VIDEO')
 
     dss_id = '{type}{index:03d}'.format(type='dss', index=self._nextIndex)
     self._nextIndex += 1
     self._clients[dss_id] = {'name': 'crm_dss.py', 'desc': '', 'type': 'dss', 'owner': 'crm', 'ip': '', 'port': '', 'timestamp': self._now}
-    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+86}', f'--dss_ip={self._ip}', '--descr=dss->SITL...86', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'LMD', 'RTK')
+    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+86}', f'--dss_ip={self._ip}', '--descr=dss->port 86 [SIM]', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'LMD', 'RTK')
 
     return dss.auxiliaries.zmq.ack(fcn)
 

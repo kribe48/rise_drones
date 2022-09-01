@@ -93,8 +93,6 @@ class AppUsspMission():
     self.delta_r_max = dss.auxiliaries.config.config['app_ussp_mission']['delta_r_max']
     self.height_max = dss.auxiliaries.config.config['app_ussp_mission']['height_max']
     self.height_min = dss.auxiliaries.config.config['app_ussp_mission']['height_min']
-    #speed parameters
-    self.horizontal_speed = dss.auxiliaries.config.config['app_ussp_mission']['horizontal_speed']
     #
     self.drone_data = {"pos": Waypoint(), "time": 0.0, "heading": 0.0, "velocity": [0.0, 0.0, 0.0]}
     self.start_pos = Waypoint()

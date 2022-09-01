@@ -81,6 +81,10 @@ class AppUsspMission():
 
     for route in self.input_routes.values():
       route['status'] = "pending"
+      route['speed'] = 5.0
+      if "id0" in route:
+        if "speed" in route["id0"]:
+          route["speed"] = route["id0"]["speed"]
 
     self.capabilities = capabilities
     # USSP routes
@@ -325,7 +329,7 @@ class AppUsspMission():
     for route_type, route in self.input_routes.items():
       input_positions = [current_position]
       for wp_name, wp in route.items():
-        if wp_name != "status":
+        if "id" in wp_name:
           input_positions.append(Waypoint(wp["lat"], wp["lon"], current_position.alt) )
       use_altitude = False
       #Check if the drone is currently in the air (plan withdrawn received)
@@ -334,7 +338,7 @@ class AppUsspMission():
         # Modify the last waypoint to be on the ground
         input_positions[-1].alt = self.ussp.query_ground_height(input_positions[-1].lat, input_positions[-1].lon)
         takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=10)
-      (plan_id, delay) = self.ussp.request_plan(self.operator_id, self.uas_id, epsg=4979, use_altitude=use_altitude, positions=input_positions, takeoff_time=takeoff_time, speed=self.horizontal_speed, max_speed=15.0, ascend_rate=2.0, descend_rate=1.0)
+      (plan_id, delay) = self.ussp.request_plan(self.operator_id, self.uas_id, epsg=4979, use_altitude=use_altitude, positions=input_positions, takeoff_time=takeoff_time, speed=route['speed'], max_speed=7.0, ascend_rate=2.0, descend_rate=1.0)
       if plan_id is None or delay is None:
         raise dss.auxiliaries.exception.Error
       time.sleep(delay)
@@ -369,7 +373,7 @@ class AppUsspMission():
     for ussp_wp in ussp_route_wps.values():
       wp_mapped = 0
       for wp_name, wp in route.items():
-        if wp_name != "status":
+        if "id" in wp_name:
           if abs(wp["lat"]-ussp_wp["lat"]) < 1e-6 and abs(wp["lon"] - ussp_wp["lon"]) < 1e-6:
             break
           wp_mapped += 1

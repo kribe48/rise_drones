@@ -376,13 +376,13 @@ class CRM:
 
     port = self._socket.port
 
-    subprocess.Popen(['build/sitl/bin/arducopter', '-S', '--model', '+', '--speedup', '1', '--home', '58.408870, 15.659209,52,45', '--defaults=/home/droneadmin/ardupilot/Tools/autotest/default_params/copter.parm', f'--base-port={port+56}', '-I0', '--sysid', '1'], cwd='/home/droneadmin/ardupilot/', shell=False)
-    subprocess.Popen(['.ardupilot/bin/python3', '.ardupilot/bin/mavproxy.py', f'--master=tcp:127.0.0.1:{port+56}', f'--out=tcpin:0.0.0.0:{port+87}', f'--out=tcpin:0.0.0.0:{port+88}', '--daemon'], cwd='/home/droneadmin/ardupilot/', shell=False)
+    subprocess.Popen(['build/sitl/bin/arducopter', '-S', '--model', '+', '--speedup', '1', '--home', f'{config["CRM"]["SITL"]["drone_1"]["lat"]},{config["CRM"]["SITL"]["drone_1"]["lon"]},{config["CRM"]["SITL"]["drone_1"]["alt"]},{config["CRM"]["SITL"]["drone_1"]["heading"]}', f'--defaults={config["CRM"]["SITL"]["ardupilot_dir"]}Tools/autotest/default_params/copter.parm', f'--base-port={port+56}', '-I0', '--sysid', '1'], cwd=f'{config["CRM"]["SITL"]["ardupilot_dir"]}', shell=False)
+    subprocess.Popen(['.ardupilot/bin/python3', '.ardupilot/bin/mavproxy.py', f'--master=tcp:127.0.0.1:{port+56}', f'--out=tcpin:0.0.0.0:{port+87}', f'--out=tcpin:0.0.0.0:{port+88}', '--daemon'], cwd=f'{config["CRM"]["SITL"]["ardupilot_dir"]}', shell=False)
 
     dss_id = '{type}{index:03d}'.format(type='dss', index=self._nextIndex)
     self._nextIndex += 1
     self._clients[dss_id] = {'name': 'crm_dss.py', 'desc': '', 'type': 'dss', 'owner': 'crm', 'ip': '', 'port': '', 'timestamp': self._now}
-    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+88}', f'--dss_ip={self._ip}', '--descr=dss->SITL...88', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'C0', 'RTK', 'LMD', 'RGB', 'VIDEO')
+    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+88}', f'--dss_ip={self._ip}', '--descr=dss->port 88 [SIM]', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'C0', 'RTK', 'LMD', 'RGB', 'VIDEO')
     return dss.auxiliaries.zmq.ack(fcn)
 
   def _request_launch_sitl(self, msg: dict) -> dict:
@@ -399,32 +399,29 @@ class CRM:
     port = self._socket.port
 
     # arducopter expects an interactive shell (mavproxy --daemon does not)
-    #subprocess.Popen(['build/sitl/bin/arducopter', '-S', '--model', '+', '--speedup', '1', '--home', '58.533153,15.580979,35,45', '--slave', '0', '--defaults=/home/droneadmin/ardupilot/Tools/autotest/default_params/copter.parm', f'--base-port={port+51}', '-I0', '--sysid', '1'], cwd='/home/droneadmin/ardupilot/', shell=False)
-    subprocess.Popen(['build/sitl/bin/arducopter', '-S', '--model', '+', '--speedup', '1', '--home', '58.533153,15.580979,35,45', '--defaults=/home/droneadmin/ardupilot/Tools/autotest/default_params/copter.parm', f'--base-port={port+51}', '-I0', '--sysid', '1'], cwd='/home/droneadmin/ardupilot/', shell=False)
-    subprocess.Popen(['.ardupilot/bin/python3', '.ardupilot/bin/mavproxy.py', f'--master=tcp:127.0.0.1:{port+51}', f'--out=tcpin:0.0.0.0:{port+81}', f'--out=tcpin:0.0.0.0:{port+82}', '--daemon'], cwd='/home/droneadmin/ardupilot/', shell=False)
+    subprocess.Popen(['build/sitl/bin/arducopter', '-S', '--model', '+', '--speedup', '1', '--home', f'{config["CRM"]["SITL"]["drone_2"]["lat"]},{config["CRM"]["SITL"]["drone_2"]["lon"]},{config["CRM"]["SITL"]["drone_2"]["alt"]},{config["CRM"]["SITL"]["drone_2"]["heading"]}', f'--defaults={config["CRM"]["SITL"]["ardupilot_dir"]}Tools/autotest/default_params/copter.parm', f'--base-port={port+51}', '-I0', '--sysid', '1'], cwd=f'{config["CRM"]["SITL"]["ardupilot_dir"]}', shell=False)
+    subprocess.Popen(['.ardupilot/bin/python3', '.ardupilot/bin/mavproxy.py', f'--master=tcp:127.0.0.1:{port+51}', f'--out=tcpin:0.0.0.0:{port+81}', f'--out=tcpin:0.0.0.0:{port+82}', '--daemon'], cwd=f'{config["CRM"]["SITL"]["ardupilot_dir"]}', shell=False)
 
-    #subprocess.Popen(['build/sitl/bin/arducopter', '-S', '--model', '+', '--speedup', '1', '--home', '58.533153,15.580979,35,45', '--slave', '0', '--defaults=/home/droneadmin/ardupilot/Tools/autotest/default_params/copter.parm', f'--base-port={port+61}', '-I1', '--sysid', '2'], cwd='/home/droneadmin/ardupilot/', shell=False)
-    subprocess.Popen(['build/sitl/bin/arducopter', '-S', '--model', '+', '--speedup', '1', '--home', '58.533153,15.580979,35,45', '--defaults=/home/droneadmin/ardupilot/Tools/autotest/default_params/copter.parm', f'--base-port={port+61}', '-I1', '--sysid', '2'], cwd='/home/droneadmin/ardupilot/', shell=False)
-    subprocess.Popen(['.ardupilot/bin/python3', '.ardupilot/bin/mavproxy.py', f'--master=tcp:127.0.0.1:{port+61}', f'--out=tcpin:0.0.0.0:{port+83}', f'--out=tcpin:0.0.0.0:{port+84}', '--daemon'], cwd='/home/droneadmin/ardupilot/', shell=False)
+    subprocess.Popen(['build/sitl/bin/arducopter', '-S', '--model', '+', '--speedup', '1', '--home', f'{config["CRM"]["SITL"]["drone_3"]["lat"]},{config["CRM"]["SITL"]["drone_3"]["lon"]},{config["CRM"]["SITL"]["drone_3"]["alt"]},{config["CRM"]["SITL"]["drone_3"]["heading"]}', f'--defaults={config["CRM"]["SITL"]["ardupilot_dir"]}Tools/autotest/default_params/copter.parm', f'--base-port={port+61}', '-I1', '--sysid', '2'], cwd=f'{config["CRM"]["SITL"]["ardupilot_dir"]}', shell=False)
+    subprocess.Popen(['.ardupilot/bin/python3', '.ardupilot/bin/mavproxy.py', f'--master=tcp:127.0.0.1:{port+61}', f'--out=tcpin:0.0.0.0:{port+83}', f'--out=tcpin:0.0.0.0:{port+84}', '--daemon'], cwd=f'{config["CRM"]["SITL"]["ardupilot_dir"]}', shell=False)
 
-    #subprocess.Popen(['build/sitl/bin/arducopter', '-S', '--model', '+', '--speedup', '1', '--home', '58.533153,15.580979,35,45', '--slave', '0', '--defaults=/home/droneadmin/ardupilot/Tools/autotest/default_params/copter.parm', f'--base-port={port+71}', '-I2', '--sysid', '3'], cwd='/home/droneadmin/ardupilot/', shell=False)
-    subprocess.Popen(['build/sitl/bin/arducopter', '-S', '--model', '+', '--speedup', '1', '--home', '58.533153,15.580979,35,45', '--defaults=/home/droneadmin/ardupilot/Tools/autotest/default_params/copter.parm', f'--base-port={port+71}', '-I2', '--sysid', '3'], cwd='/home/droneadmin/ardupilot/', shell=False)
-    subprocess.Popen(['.ardupilot/bin/python3', '.ardupilot/bin/mavproxy.py', f'--master=tcp:127.0.0.1:{port+71}', f'--out=tcpin:0.0.0.0:{port+85}', f'--out=tcpin:0.0.0.0:{port+86}', '--daemon'], cwd='/home/droneadmin/ardupilot/', shell=False)
+    subprocess.Popen(['build/sitl/bin/arducopter', '-S', '--model', '+', '--speedup', '1', '--home', f'{config["CRM"]["SITL"]["drone_4"]["lat"]},{config["CRM"]["SITL"]["drone_4"]["lon"]},{config["CRM"]["SITL"]["drone_4"]["alt"]},{config["CRM"]["SITL"]["drone_4"]["heading"]}', f'--defaults={config["CRM"]["SITL"]["ardupilot_dir"]}Tools/autotest/default_params/copter.parm', f'--base-port={port+71}', '-I2', '--sysid', '3'], cwd=f'{config["CRM"]["SITL"]["ardupilot_dir"]}', shell=False)
+    subprocess.Popen(['.ardupilot/bin/python3', '.ardupilot/bin/mavproxy.py', f'--master=tcp:127.0.0.1:{port+71}', f'--out=tcpin:0.0.0.0:{port+85}', f'--out=tcpin:0.0.0.0:{port+86}', '--daemon'], cwd=f'{config["CRM"]["SITL"]["ardupilot_dir"]}', shell=False)
 
     dss_id = '{type}{index:03d}'.format(type='dss', index=self._nextIndex)
     self._nextIndex += 1
     self._clients[dss_id] = {'name': 'crm_dss.py', 'desc': '', 'type': 'dss', 'owner': 'crm', 'ip': '', 'port': '', 'timestamp': self._now}
-    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+82}', f'--dss_ip={self._ip}', '--descr=dss->SITL...82', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'C0', 'RGB')
+    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+82}', f'--dss_ip={self._ip}', '--descr=dss->port 82 [SIM]', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'C0', 'RGB')
 
     dss_id = '{type}{index:03d}'.format(type='dss', index=self._nextIndex)
     self._nextIndex += 1
     self._clients[dss_id] = {'name': 'crm_dss.py', 'desc': '', 'type': 'dss', 'owner': 'crm', 'ip': '', 'port': '', 'timestamp': self._now}
-    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+84}', f'--dss_ip={self._ip}', '--descr=dss->SITL...84', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'RTK',  'RGB', 'VIDEO')
+    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+84}', f'--dss_ip={self._ip}', '--descr=dss->port 84 [SIM]', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'RTK',  'RGB', 'VIDEO')
 
     dss_id = '{type}{index:03d}'.format(type='dss', index=self._nextIndex)
     self._nextIndex += 1
     self._clients[dss_id] = {'name': 'crm_dss.py', 'desc': '', 'type': 'dss', 'owner': 'crm', 'ip': '', 'port': '', 'timestamp': self._now}
-    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+86}', f'--dss_ip={self._ip}', '--descr=dss->SITL...86', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'LMD', 'RTK')
+    dss.auxiliaries.spawnDaemon.spawnDaemon('./crm_dss.py', 'crm_dss.py', f'--dss_id={dss_id}', f'--crm={self._ip}:{self._socket.port}', f'--drone={self._ip}:{port+86}', f'--dss_ip={self._ip}', '--descr=dss->port 86 [SIM]', '--without-clearance-check', '--without-midstick-check', '--capabilities', 'LMD', 'RTK')
 
     return dss.auxiliaries.zmq.ack(fcn)
 

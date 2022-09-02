@@ -148,7 +148,7 @@ class AppMission():
         if fcn in self._commands:
           request = self._commands[fcn]['request']
           answer = request(msg)
-        else :
+        else:
           answer = dss.auxiliaries.zmq.nack(msg['fcn'], 'Request not supported')
         answer = json.dumps(answer)
         self._app_socket.send_json(answer)
@@ -214,7 +214,7 @@ class AppMission():
           current_wp = int(msg['currentWP'])
           if current_wp == self.start_wp+1 and not self.start_wp_reached:
             self.start_wp_reached = True
-            self.perform_action(self.mission_type, "at start_wp")
+            self.perform_action("at start_wp")
             #start wp reached, start continuous photo
             _logger.info('Start waypoint reached')
 
@@ -284,7 +284,7 @@ class AppMission():
     try:
       self.drone.photo_download('latest', 'low')
       time.sleep(1.0)
-    except dss.auxiliaries.exception.Nack :
+    except dss.auxiliaries.exception.Nack:
       _logger.warning("Unable to download latest photo!!!")
 
 

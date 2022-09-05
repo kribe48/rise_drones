@@ -171,9 +171,9 @@ class Monitor():
 # MQTT-thread. Connect an agent to WARA-PS core system and report position
   def _mqtt_client(self, client):
     drone_id = client['id']
-    drone_name = "RISE-" + drone_id
-    drone_type = "hexacopter"
-    sim_real = "simulated"
+    drone_name = client['drone_name']
+    drone_type = client['drone_type']
+    sim_real = client['sim_real']
     mqtt_agent = MqttAgent(drone_name, drone_type, sim_real)
     # Wait until position has been streamed
     time.sleep(2.0)
@@ -305,8 +305,20 @@ class Monitor():
         for client in crm_clients:
           if not self.client_in_list(client['id'], self.clients):
             if client['ip'] != '':
+              if "[SIM]" in client['desc']:
+                client['sim_real'] = "simulated"
+                client['drone_name'] = "RISE-" + client['id']
+                client['drone_type'] = 'simulated'
+              elif "HX" in client['desc']:
+                client['sim_real'] = "real"
+                client['drone_name'] = "RISE-" + client['descr']
+                client['drone_type'] = 'Hexacopter'
+              else:
+                client['sim_real'] = "real"
+                client['drone_name'] = "RISE-"+client['id']
+                client['drone_type'] = "DJI Mini"
               self.clients.append(client)
-              print(f'Client {client["id"]} added to the list')
+              print(f'Client {client} added to the list')
               self.setup_client(client)
               self.print_clients()
             else:

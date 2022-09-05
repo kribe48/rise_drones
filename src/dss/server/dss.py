@@ -599,16 +599,16 @@ class Server:
     if not self.from_owner(msg):
       descr = 'Requester ({}) is not the DSS owner'.format(msg['id'])
       answer = dss.auxiliaries.zmq.nack(fcn, descr)
+
     elif self._in_controls != 'APPLICATION':
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
+
     elif False: # TODO, roll pitch yaw is out of range
       answer = dss.auxiliaries.zmq.nack(fcn, 'Roll, pitch or yaw is out of range fo the gimbal')
     # Accept
     else:
       answer = dss.auxiliaries.zmq.ack(fcn)
-      self._hexa.set_gimbal(msg['pitch'], msg['roll'], msg['yaw'])
-      answer = dss.auxiliaries.zmq.nack(fcn, 'set_gimbal check roll pitch yaw not implemented')
-      # TODO, implement check roll pitch yaw! ( or just pitch?)
+      self._hexa.set_gimbal(msg['roll'], msg['pitch'], msg['yaw'])
     return answer
 
   def _request_set_gripper(self, msg) -> dict:
@@ -796,13 +796,13 @@ class Server:
       if self._hexa.glana.disconnect():
         return {'fcn': 'ack', 'arg': msg['fcn']}
     elif msg['arg']['cmd'] == 'start_rec':
-      self._hexa.set_gimbal(-90, 0, 90)
+      self._hexa.set_gimbal(0, -90, 90)
       self._hexa.glana.start_rec()
       self._logger.info('Gimbal is set and camera is recording')
       return {'fcn': 'ack', 'arg': msg['fcn']}
     elif msg['arg']['cmd'] == 'stop_rec':
       self._hexa.glana.stop_rec()
-      self._hexa.set_gimbal(-1, 0, 0)
+      self._hexa.set_gimbal(0, -1, 0)
       return {'fcn': 'ack', 'arg': msg['fcn']}
 
     return {'fcn': 'nack', 'arg': msg['fcn']}
@@ -969,7 +969,7 @@ class Server:
           self._hexa.task_ardupilot_rtl()
         if self._in_controls != 'APPLICATION':
           self._hexa.glana.stop_rec()
-          self._hexa.set_gimbal(-1, 0, 0)
+          self._hexa.set_gimbal(0, -1, 0)
           self._logger.error("Client doesn't have the control anymore... stopped recording")
 
   #############################################################################

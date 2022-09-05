@@ -343,7 +343,7 @@ class KeyboardClient(dss.client.Client):
           else:
             gimbal_pitch = 0
           print(' to %d' % gimbal_pitch)
-          self._dss.set_gimbal(gimbal_pitch, 0, 0)
+          self._dss.set_gimbal(0, gimbal_pitch, 0)
         elif key == 'G':
           print("gogo, start wp 0")
           self._dss.gogo(0)

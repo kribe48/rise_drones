@@ -365,8 +365,8 @@ class Hexacopter:
     return self.vehicle.channels[channel]
 
   def task_set_gimbal(self, args):
-    (pitch, roll, yaw) = args
-    self.set_gimbal(pitch, roll, yaw)
+    (roll, pitch, yaw) = args
+    self.set_gimbal(roll, pitch, yaw)
 
   # Returns number of tracked satellites
   def get_nsat(self) -> int:
@@ -549,9 +549,10 @@ class Hexacopter:
       self.logger.info(json.dumps(self.pending_mission[id_str].as_dict()))
 
 
-  def set_gimbal(self, pitch, roll, yaw):
+  def set_gimbal(self, roll, pitch, yaw):
     self.logger.info('Gimbal rotate: pitch: %d, roll: %d, yaw: %d', pitch, roll, yaw)
     self.vehicle.gimbal.rotate(pitch, roll, yaw)
+    #self.rotate_gimbal(pitch, roll, yaw)
 
   def gimbal_stow(self):
     self.set_gimbal(0, 0, 0)
@@ -1100,7 +1101,40 @@ class Hexacopter:
       0, 0)  # yaw, yaw_rate (not supported yet, ignored in GCS_Mavlink)
     self.vehicle.send_mavlink(msg)
 
+  def rotate_gimbal(self, pitch, roll, yaw):
+      """
+      Rotate the gimbal to a specific vector.
 
+      .. code-block:: python
+
+          #Point the gimbal straight down
+          vehicle.gimbal.rotate(-90, 0, 0)
+
+      :param pitch: Gimbal pitch in degrees relative to the vehicle (see diagram for :ref:`attitude <figure_attitude>`).
+          A value of 0 represents a camera pointed straight ahead relative to the front of the vehicle,
+          while -90 points the camera straight down.
+      :param roll: Gimbal roll in degrees relative to the vehicle (see diagram for :ref:`attitude <figure_attitude>`).
+      :param yaw: Gimbal yaw in degrees relative to *global frame* (0 is North, 90 is West, 180 is South etc.)
+      """
+      msg = self.vehicle.message_factory.mount_configure_encode(
+          0, 1,    # target system, target component
+          mavutil.mavlink.MAV_MOUNT_MODE_MAVLINK_TARGETING,  #mount_mode
+          1,  # stabilize roll
+          1,  # stabilize pitch
+          1,  # stabilize yaw
+      )
+      self.vehicle.send_mavlink(msg)
+      msg = self.vehicle.message_factory.command_long_encode(
+        0, 1, # target system, target component
+        mavutil.mavlink.MAV_CMD_DO_MOUNT_CONTROL, # command
+        0, # confirmation
+        pitch, # pitch (degrees)
+        roll, # roll (degrees)
+        yaw, # yaw (degrees)
+        0, 0, 0, # params 4-6 (unused)
+        2 # MAV_MOUNT_MODE_MAVLINK_TARGETING
+        )
+      self.vehicle.send_mavlink(msg)
   def send_cmd_speed(self, speed):
     msg = self.vehicle.message_factory.command_long_encode(
     0, 0,  # target system, target component
@@ -1454,7 +1488,7 @@ class Hexacopter:
 
           # Gimbla control
           g_pitch = int(math.atan(dalt/distance2D)/math.pi*180)
-          self.set_gimbal(g_pitch, 0, 0)
+          self.set_gimbal(0, g_pitch, 0)
 
         # Heading mode absolute
         elif heading_mode == 'absolute':
@@ -1546,7 +1580,7 @@ class Hexacopter:
 
           # Gimbla control
           g_pitch = int(math.atan(dalt/distance2D)/math.pi*180)
-          self.set_gimbal(g_pitch, 0, 0)
+          self.set_gimbal(0, g_pitch, 0)
 
         # Heading mode abosolute
         elif heading_mode == "absolute":
@@ -1569,7 +1603,7 @@ class Hexacopter:
 
           # Gimbal control
           g_pitch = int(math.atan(dalt/distance2D)/math.pi*180)
-          self.set_gimbal(g_pitch, 0, 0)
+          self.set_gimbal(0, g_pitch, 0)
 
         # Heading mode course
         elif heading_mode ==  'course':
@@ -1594,7 +1628,7 @@ class Hexacopter:
 
           # Gimbal control
           g_pitch = int(math.atan(dalt/distance2D)/math.pi*180)
-          self.set_gimbal(g_pitch, 0, 0)
+          self.set_gimbal(0, g_pitch, 0)
 
         else:
           print("Heading mode not supported in pattern above. Stopping follower")

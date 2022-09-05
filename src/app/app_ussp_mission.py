@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 '''
-APP "app_lmd"
+APP "app_ussp_mission"
 
 Input parameters
 1. Mission - the misssion to execute
@@ -11,7 +11,7 @@ This application
 1. Connects to the CRM & USSP
 2. Asks for an available drone resource with correct capability
 3. Read and parse the mission
-4. Executes the mission (pickup, drop off)
+4. Executes the mission (potentially several routes)
 5. Finish the mission by landing at the return location
 '''
 
@@ -41,7 +41,7 @@ __status__ = 'development'
 
 #--------------------------------------------------------------------#
 
-_logger = logging.getLogger('dss.app_lmd')
+_logger = logging.getLogger('dss.app_ussp_mission')
 _context = zmq.Context()
 
 
@@ -56,13 +56,13 @@ class Waypoint():
     self.alt = alt
 
 #--------------------------------------------------------------------#
-class AppLmd():
-  def __init__(self, app_ip, app_id, crm, mission, start_wp):
+class AppUsspMission():
+  def __init__(self, app_ip, app_id, crm, mission, capabilities):
     # Create Client object
     self.drone = dss.client.Client(timeout=2000, exception_handler=None, context=_context)
 
     # Create CRM object
-    self.crm = dss.client.CRM(_context, crm, app_name='app_lmd.py', desc='LMD mission', app_id=app_id)
+    self.crm = dss.client.CRM(_context, crm, app_name='app_ussp_mission.py', desc='USSP compatible mission execution', app_id=app_id)
 
     self._alive = True
     self._dss_data_thread = None
@@ -74,31 +74,35 @@ class AppLmd():
 
     # load mission from file
     with open(mission, encoding='utf-8') as handle:
-      self.wps_to_visit = json.load(handle)
-      if "source_file" in self.wps_to_visit:
-        self.wps_to_visit.pop("source_file")
+      self.input_routes = json.load(handle)
+      if "source_file" in self.input_routes:
+        self.input_routes.pop("source_file")
 
 
-    for wp in self.wps_to_visit.values():
-      wp['status'] = "pending"
-    self.start_wp = start_wp
-    # Missions
-    self.missions = []
+    for route in self.input_routes.values():
+      route['status'] = "pending"
+      route['speed'] = 5.0
+      if "id0" in route:
+        if "speed" in route["id0"]:
+          route["speed"] = route["id0"]["speed"]
+
+    self.capabilities = capabilities
+    # USSP routes
+    self.ussp_routes = []
     #geofence parameters
-    self.delta_r_max = dss.auxiliaries.config.config['app_lmd_ussp']['delta_r_max']
-    self.height_max = dss.auxiliaries.config.config['app_lmd_ussp']['height_max']
-    self.height_min = dss.auxiliaries.config.config['app_lmd_ussp']['height_min']
-    #speed parameters
-    self.horizontal_speed = dss.auxiliaries.config.config['app_lmd_ussp']['horizontal_speed']
+    self.delta_r_max = dss.auxiliaries.config.config['app_ussp_mission']['delta_r_max']
+    self.height_max = dss.auxiliaries.config.config['app_ussp_mission']['height_max']
+    self.height_min = dss.auxiliaries.config.config['app_ussp_mission']['height_min']
     #
     self.drone_data = {"pos": Waypoint(), "time": 0.0, "heading": 0.0, "velocity": [0.0, 0.0, 0.0]}
     self.start_pos = Waypoint()
     self.start_pos_received = False
     self.drone_lla_lock = threading.Lock()
     self.uas_id = None
-    self.operator_id = dss.auxiliaries.config.config['app_lmd_ussp']['operator_id']
+    self.operator_id = dss.auxiliaries.config.config['app_ussp_mission']['operator_id']
     self.clearance_landing = False
     self.plan_withdrawn = False
+    self.mission_complete = False
 
     # The application sockets
     # Use ports depending on subnet used to pass RISE firewall
@@ -125,13 +129,13 @@ class AppLmd():
 
     # All nack reasons raises exception, registration is successful
     _logger.info('App %s listening on %s:%s', self.crm.app_id, self._app_socket.ip, self._app_socket.port)
-    _logger.info('App_lmd registered with CRM: %s', self.crm.app_id)
+    _logger.info('App registered with CRM: %s', self.crm.app_id)
     #USSP parameters
-    self.ussp_ip = dss.auxiliaries.config.config['app_lmd_ussp']['ussp_ip']
-    self.ussp_req_port = dss.auxiliaries.config.config['app_lmd_ussp']['ussp_req_port']
-    self.ussp_pub_port = dss.auxiliaries.config.config['app_lmd_ussp']['ussp_pub_port']
-    self.ussp_sub_port = dss.auxiliaries.config.config['app_lmd_ussp']['ussp_sub_port']
-    _logger.info(f'App LMD connecting to USSP: {self.ussp_ip}')
+    self.ussp_ip = dss.auxiliaries.config.config['app_ussp_mission']['ussp_ip']
+    self.ussp_req_port = dss.auxiliaries.config.config['app_ussp_mission']['ussp_req_port']
+    self.ussp_pub_port = dss.auxiliaries.config.config['app_ussp_mission']['ussp_pub_port']
+    self.ussp_sub_port = dss.auxiliaries.config.config['app_ussp_mission']['ussp_sub_port']
+    _logger.info(f'App connecting to USSP: {self.ussp_ip}')
     self.ussp = dss.client.UsspClientLib(app_id, _context)
     self.ussp.connect(self.ussp_ip, self.ussp_req_port, self.ussp_pub_port, self.ussp_sub_port)
     self.application_state = "idle"
@@ -291,34 +295,48 @@ class AppLmd():
       except:
         pass
 
-  def update_wps_to_visit(self):
-    self.wps_to_visit = {}
-    for mission in self.missions:
-      #Cancel pending missions..
-      if mission["status"] == "pending":
-        self.ussp.cancel_plan(mission["plan ID"])
-      #Add all waypoints associated to a mission that is not ended
-      if mission["status"] != "ended":
-        #Add the end position to the list of wps to visit
-        self.wps_to_visit[mission["type"]] = {"lat": mission["final pos"].lat, "lon": mission["final pos"].lon, "alt": mission["final pos"].alt, "status": mission["status"]}
-    #Reset missions list and plan withdrawn flag
+  def update_input_routes(self):
+    old_input_routes = copy.deepcopy(self.input_routes)
+    self.input_routes = {}
+    for route in self.ussp_routes:
+      #Cancel pending routes and add to input route list
+      if route["status"] == "pending":
+        self.ussp.cancel_plan(route["plan ID"])
+        self.input_routes[route["type"]] = old_input_routes[route["type"]]
+      #Add all waypoints associated to a route that is not ended
+      elif route["status"] == "running":
+        #Find what waypoints that should be kept in the plan (not visited yet)
+        new_input_route = {}
+        old_input_route = old_input_routes[route["type"]]
+        current_wp = 0
+        for wp_name, wp in old_input_route.items():
+          if current_wp < self.wp_in_old_list:
+            current_wp += 1
+          else:
+            new_input_route[wp_name] = wp
+        new_input_route["status"] = "running"
+        self.input_routes[route["type"]] = new_input_route
+    #Reset routes list and plan withdrawn flag
     self.plan_withdrawn = False
-    self.missions = {}
-  # Generate missions based on positions to visit
-  def generate_ussp_lmd_missions(self):
+    self.ussp_routes = {}
+  # Generate routes based on positions to visit
+  def generate_ussp_routes(self):
     # Request flight authorizations from the USSP
-    takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=1)
+    takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
     current_position = copy.deepcopy(self.drone_data["pos"])
-    for wp_type, waypoint in self.wps_to_visit.items():
-      position = Waypoint(waypoint["lat"], waypoint["lon"], waypoint["alt"])
+    for route_type, route in self.input_routes.items():
+      input_positions = [current_position]
+      for wp_name, wp in route.items():
+        if "id" in wp_name:
+          input_positions.append(Waypoint(wp["lat"], wp["lon"], current_position.alt) )
       use_altitude = False
       #Check if the drone is currently in the air (plan withdrawn received)
-      if waypoint["status"] == "running":
+      if route["status"] == "running":
         use_altitude = True
+        # Modify the last waypoint to be on the ground
+        input_positions[-1].alt = self.ussp.query_ground_height(input_positions[-1].lat, input_positions[-1].lon)
         takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=10)
-        position.alt = self.ussp.query_ground_height(position.lat, position.lon)
-      positions = [current_position, position]
-      (plan_id, delay) = self.ussp.request_plan(self.operator_id, self.uas_id, epsg=4979, use_altitude=use_altitude, positions=positions, takeoff_time=takeoff_time, speed=self.horizontal_speed, max_speed=15.0, ascend_rate=2.0, descend_rate=1.0)
+      (plan_id, delay) = self.ussp.request_plan(self.operator_id, self.uas_id, epsg=4979, use_altitude=use_altitude, positions=input_positions, takeoff_time=takeoff_time, speed=route['speed'], max_speed=7.0, ascend_rate=2.0, descend_rate=1.0)
       if plan_id is None or delay is None:
         raise dss.auxiliaries.exception.Error
       time.sleep(delay)
@@ -330,22 +348,35 @@ class AppLmd():
       if not self.ussp.accept_plan(plan_id):
         raise dss.auxiliaries.exception.Error
       #Convert to internal representation
-      wp_mission = self.ussp.transform_plan(plan, use_altitude)
-      #save mission
-      mission = {}
-      mission["final pos"] = position
-      mission["wp_mission"] = wp_mission
-      mission["takeoff_time"] = datetime.datetime.fromisoformat(plan[0]["time"])
-      mission["plan ID"] = plan_id
-      mission["type"] = wp_type
-      mission["status"] = waypoint["status"]
-      if mission["status"] == "pending":
-        mission["takeoff_height"] = min(plan[1]["position"][2] - plan[0]["position"][2], 30.0)
-        _logger.info(f"takeoff_height: {mission['takeoff_height']}, wp_mission : {wp_mission}")
-      self.missions.append(mission)
+      route_wps = self.ussp.transform_plan(plan, use_altitude)
+      #save route
+      route_ussp = {}
+      route_ussp["route_wps"] = route_wps
+      route_ussp["transform_current_wp"] = self.map_input_to_ussp_wps(route, route_wps)
+      route_ussp["takeoff_time"] = datetime.datetime.fromisoformat(plan[0]["time"])
+      route_ussp["plan ID"] = plan_id
+      route_ussp["type"] = route_type
+      route_ussp["status"] = route["status"]
+      if route_ussp["status"] == "pending":
+        route_ussp["takeoff_height"] = min(plan[1]["position"][2] - plan[0]["position"][2], 30.0)
+        _logger.info(f"takeoff_height: {route_ussp['takeoff_height']}, route_wps : {route_wps}")
+      self.ussp_routes.append(route_ussp)
       #Update takeoff time
-      current_position = position
+      current_position = Waypoint(input_positions[-1].lat, input_positions[-1].lon, input_positions[-1].alt)
       takeoff_time = datetime.datetime.fromisoformat(plan[-1]["time"]) + datetime.timedelta(seconds=plan[-1]["time margin"]) + datetime.timedelta(seconds=10)
+
+  @staticmethod
+  def map_input_to_ussp_wps(route, ussp_route_wps):
+    input_mapper = []
+    for ussp_wp in ussp_route_wps.values():
+      wp_mapped = 0
+      for wp_name, wp in route.items():
+        if "id" in wp_name:
+          if abs(wp["lat"]-ussp_wp["lat"]) < 1e-6 and abs(wp["lon"] - ussp_wp["lon"]) < 1e-6:
+            break
+          wp_mapped += 1
+      input_mapper.append(wp_mapped)
+    return input_mapper
 
 #------------------------TASKS----------------------------------------#
   def connect_to_drone(self, capabilities):
@@ -396,7 +427,7 @@ class AppLmd():
         if nack.msg == 'Not flying':
           _logger.info("Pilot has landed")
         else:
-          _logger.info("Fly mission was nacked %s", nack.msg)
+          _logger.info("Fly route was nacked %s", nack.msg)
         break
       except dss.auxiliaries.exception.AbortTask:
         if self.plan_withdrawn:
@@ -404,23 +435,39 @@ class AppLmd():
           break
         # Otherwise - PILOT took controls
         (current_wp, _) = self.drone.get_currentWP()
-        # Prepare to continue the mission
+        # Prepare to continue the route
         start_wp = current_wp
         _logger.info("Pilot took controls, awaiting PILOT action")
         self.drone.await_controls()
         _logger.info("PILOT gave back controls")
-        # Try to continue mission
+        # Try to continue route
         continue
       else:
-        # Mission is completed
+        # route is completed
         break
-
+  def check_action(self, phase, route_type):
+    if phase == "pre takeoff":
+      if route_type == 'drop off':
+        #Make sure that the package is loaded
+        self.drone.load_package()
+    elif phase == "post takeoff":
+      if route_type == 'camera route':
+        self.drone.set_gimbal(0,90,0)
+    elif phase == "pre land":
+      if route_type == 'camera route':
+        self.drone.set_gimbal(0,0,0)
+    elif phase == "landed":
+      if route_type == "drop off":
+        self.drone.unload_package()
+      elif route_type == "pickup":
+        self.drone.load_package()
+      else:
+        self.application_state = "idle"
+        self.mission_complete = True
 #--------------------------------------------------------------------#
 # Main function
   def main(self):
-    # Connect to a delivery drone
-    capabilities = ['LMD']
-    self.connect_to_drone(capabilities)
+    self.connect_to_drone(self.capabilities)
     # Start USSP subscriber thread
     ussp_sub_thread = threading.Thread(target=self._ussp_subscriber_thread, daemon=True)
     ussp_sub_thread.start()
@@ -433,62 +480,62 @@ class AppLmd():
     # Start streaming NRID
     nrid_thread = threading.Thread(target=self._stream_nrid, daemon=True)
     nrid_thread.start()
-    return_reached = False
     self.application_state = "planning"
-    while not return_reached:
-      # Generate USSP missions
-      self.generate_ussp_lmd_missions()
+    while not self.mission_complete:
+      # Generate USSP routes
+      self.generate_ussp_routes()
       self.application_state = "executing"
-      for mission in self.missions:
-        self.initialize_waypoints(mission["wp_mission"], reset_geofence)
+      for route in self.ussp_routes:
+        self.initialize_waypoints(route["route_wps"], reset_geofence)
         # Only update geofence once
         reset_geofence = False
         #Wait for takeoff time
-        while datetime.datetime.utcnow() + datetime.timedelta(seconds=10) < mission["takeoff_time"]:
-          _logger.info(f"Waiting to start mission execution, time remaining: {mission['takeoff_time']-datetime.datetime.utcnow()}")
-          time.sleep(0.5)
-        # activate mission
-        self.ussp.activate_plan(mission["plan ID"])
+        while datetime.datetime.utcnow() + datetime.timedelta(seconds=10) < route["takeoff_time"]:
+          _logger.info(f"Waiting to start route execution, time remaining: {route['takeoff_time']-datetime.datetime.utcnow()-datetime.timedelta(seconds=10)}")
+          time.sleep(1)
+        # check action and activate route
+        self.check_action("pre takeoff", route["type"])
+        self.ussp.activate_plan(route["plan ID"])
         # Launch drone
-        if mission["status"] == "pending":
-          self.launch_drone(mission["takeoff_height"], reset_dss_srtl)
+        if route["status"] == "pending":
+          self.launch_drone(route["takeoff_height"], reset_dss_srtl)
           #Only reset dss srtl once
           reset_dss_srtl = False
         # Fly to waypoints
         if not self.plan_withdrawn:
+          #Check if any action post takeoff before flying waypoints
+          self.check_action("post takeoff", route["type"])
           self.fly_waypoints()
         if self.plan_withdrawn:
           #Make the drone hover
           self.drone.set_vel_BODY(0,0,0,0)
-          mission["status"] = "running"
+          route["status"] = "running"
           self.application_state = "planning"
-          self.ussp.end_plan(mission["plan ID"])
-          self.update_wps_to_visit()
+          self.ussp.end_plan(route["plan ID"])
+          (current_wp, _) = self.drone.get_currentWP()
+          self.wp_in_old_list = route["transform_current_wp"][current_wp]
+          self.update_input_routes()
           break
         #wait for reaching waypoint
         time.sleep(1.0)
         #Await landing clearance?
         self.await_clearance_landing()
         #Land
+        self.check_action("pre land", route["type"])
         self.drone.land()
         # End plan
-        self.ussp.end_plan(mission["plan ID"])
-        mission["status"] = "ended"
-        # Check wp type
-        if mission["type"] == "drop off":
-          self.drone.unload_package()
-        elif mission["type"] == "pickup":
-          self.drone.load_package()
-        elif mission["type"] == "return":
-          self.application_state = "idle"
-          return_reached = True
+        self.ussp.end_plan(route["plan ID"])
+        route["status"] = "ended"
+        # Check action depending on route type
+        self.check_action("landed", route["type"])
+
 
 
 
 #--------------------------------------------------------------------#
 def _main():
   # parse command-line arguments
-  parser = argparse.ArgumentParser(description='APP "app_lmd_ussp"', allow_abbrev=False, add_help=False)
+  parser = argparse.ArgumentParser(description='APP "app_ussp_mission"', allow_abbrev=False, add_help=False)
   parser.add_argument('-h', '--help', action='help', help=argparse.SUPPRESS)
   parser.add_argument('--app_ip', type=str, help='ip of the app', required=True)
   parser.add_argument('--id', type=str, default=None, help='id of this app_noise instance if started by crm')
@@ -497,17 +544,16 @@ def _main():
   parser.add_argument('--owner', type=str, help='id of the instance controlling app_noise - not used in this use case')
   parser.add_argument('--stdout', action='store_true', help='enables logging to stdout')
   parser.add_argument('--mission', type=str, required=True)
-  parser.add_argument('--startwp', default=0, type=int)
+  parser.add_argument('--capabilities', type=str, default=None, nargs='*', help='If any specific capability is required')
   args = parser.parse_args()
 
   # Identify subnet to sort log files in structure
   subnet = dss.auxiliaries.zmq.get_subnet(ip=args.app_ip)
   # Initiate log file
-  dss.auxiliaries.logging.configure('app_lmd_ussp', stdout=args.stdout, rotating=True, loglevel=args.log, subdir=subnet)
-
-  # Create the AppLMD class
+  dss.auxiliaries.logging.configure('app_ussp_mission', stdout=args.stdout, rotating=True, loglevel=args.log, subdir=subnet)
+  # Create the AppUsspMission class
   try:
-    app = AppLmd(args.app_ip, args.id, args.crm, args.mission, args.startwp)
+    app = AppUsspMission(args.app_ip, args.id, args.crm, args.mission, args.capabilities)
   except dss.auxiliaries.exception.NoAnswer:
     _logger.error('Failed to instantiate application: Probably the CRM couldn\'t be reached')
     sys.exit()

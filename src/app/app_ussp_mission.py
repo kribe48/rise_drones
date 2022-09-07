@@ -245,7 +245,8 @@ class AppUsspMission():
           self.drone_data["time"] = datetime.datetime.utcnow()
           self.drone_data["pos"].set_lla(msg['lat'], msg['lon'], msg['alt'])
           self.drone_data["heading"] = msg['heading']
-          self.drone_data["velocity"] = msg['velocity']
+          if "velocity" in msg:
+            self.drone_data["velocity"] = msg['velocity']
           self.drone_lla_lock.release()
           if not self.start_pos_received:
             self.start_pos.set_lla(msg['lat'], msg['lon'], msg['alt'])
@@ -270,7 +271,9 @@ class AppUsspMission():
       self.drone_lla_lock.acquire()
       drone_data = self.drone_data
       self.drone_lla_lock.release()
-      speed = math.sqrt(drone_data['velocity'][0]**2 + drone_data['velocity'][1]**2)
+      speed=0
+      if "velocity" in drone_data:
+        speed = math.sqrt(drone_data['velocity'][0]**2 + drone_data['velocity'][1]**2)
       if speed > 0.1:
         bearing = (180/math.pi)*math.atan2(drone_data['velocity'][1], drone_data['velocity'][0])
       else:
@@ -396,6 +399,7 @@ class AppUsspMission():
 
     # Setup info stream to DSS
     self.setup_dss_info_stream()
+    _logger.info("Setup dss info stream")
 
     self.uas_id = str(uuid.uuid1())
 

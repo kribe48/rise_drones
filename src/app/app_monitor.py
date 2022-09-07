@@ -76,6 +76,7 @@ class Monitor():
     #Store the data received from the drones
     self.drone_data = {}
     self.drone_data_locks = {}
+    self.battery_data = {}
     self.mqtt_agent = mqtt_agent
     self._mqtt_threads = {}
 
@@ -91,7 +92,6 @@ class Monitor():
     self.clients = []
 
     # Unregister APP from CRM
-
     _logger.info("Unregister from CRM")
     answer = self.crm.unregister()
     if not dss.auxiliaries.zmq.is_ack(answer):
@@ -189,11 +189,12 @@ class Monitor():
       if drone_data :
         mqtt_agent.set_lla(drone_data['lat'], drone_data['lon'], drone_data['alt'])
         mqtt_agent.set_heading(drone_data['heading'])
-        speed = math.sqrt(drone_data['velocity'][0]**2 + drone_data['velocity'][1]**2)
-        mqtt_agent.set_speed(speed)
-        if speed > 0.1 :
-          course = (180/math.pi)*math.atan2(drone_data['velocity'][1], drone_data['velocity'][0])
-          mqtt_agent.set_course(course)
+        if 'velocity' in drone_data:
+          speed = math.sqrt(drone_data['velocity'][0]**2 + drone_data['velocity'][1]**2)
+          mqtt_agent.set_speed(speed)
+          if speed > 0.1 :
+            course = (180/math.pi)*math.atan2(drone_data['velocity'][1], drone_data['velocity'][0])
+            mqtt_agent.set_course(course)
       mqtt_agent.send_heartbeat()
       mqtt_agent.send_sensor_info()
       mqtt_agent.send_position()
@@ -218,7 +219,6 @@ class Monitor():
     self.enable_stream(stream,req_socket)
     # Get info port from DSS
     sub_port = self.get_port(req_socket, 'info_pub_port')
-    # print("Info pub port: ", sub_port)
 
     # Create subscription socket and start listening thread
     sub_socket = dss.auxiliaries.zmq.Sub(_context, ip, sub_port, drone_id)
@@ -234,22 +234,21 @@ class Monitor():
           self.drone_data_locks[drone_id].acquire()
           self.drone_data[drone_id] = msg
           self.drone_data_locks[drone_id].release()
+        elif topic == 'battery':
+          self.battery_data[drone_id] = msg
         else:
-          print("Topic not recognized on info link: ", (topic, msg), '\r')
+          _logger.info(f"Topic {topic} not recognized on info link {msg}")
       except:
         pass
     #Remove the drone from the map
     self.drone_data_locks[drone_id].acquire()
     try :
       self.drone_data.pop(drone_id)
+      self.battery_data.pop(drone_id)
     except KeyError :
-      _logger.info("No data received from client with ID %s" % drone_id)
+      _logger.info("Not all data received from client with ID %s" % drone_id)
     self.drone_data_locks[drone_id].release()
     self.drone_data_locks.pop(drone_id)
-    self.disable_stream(stream,req_socket)
-    sub_socket.unsubscribe(stream)
-    sub_socket.close()
-    req_socket.close()
     _logger.info("Stopped thread and closed socket for client: %s" % drone_id)
 
 #--------------------------------------------------------------------#
@@ -311,7 +310,7 @@ class Monitor():
                 client['drone_type'] = 'simulated'
               elif "HX" in client['desc']:
                 client['sim_real'] = "real"
-                client['drone_name'] = "RISE-" + client['descr']
+                client['drone_name'] = "RISE-" + client['desc']
                 client['drone_type'] = 'Hexacopter'
               else:
                 client['sim_real'] = "real"

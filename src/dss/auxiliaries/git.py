@@ -16,11 +16,21 @@ _logger = logging.getLogger(__name__)
 
 #--------------------------------------------------------------------#
 
+def hash() -> None:
+  try:
+    import git
+    repo = git.Repo(search_parent_directories=True)
+    return repo.head.object.hexsha
+  except:
+    _logger.error(traceback.format_exc())
+
 def branch() -> str:
   try:
     import git
     repo = git.Repo(search_parent_directories=True)
     return repo.active_branch.name
+  except git.exc.InvalidGitRepositoryError:
+    return ''
   except:
     _logger.error(traceback.format_exc())
     return '??'
@@ -30,6 +40,10 @@ def describe() -> str:
     import git
     repo = git.Repo(search_parent_directories=True)
     return repo.git.describe()
+  except git.exc.GitCommandError:
+    return hash()
+  except git.exc.InvalidGitRepositoryError:
+    return ''
   except:
     _logger.error(traceback.format_exc())
     return '??'

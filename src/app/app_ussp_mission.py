@@ -515,6 +515,7 @@ class AppUsspMission():
           _logger.info(f"Waiting to start route execution, time remaining: {route['takeoff_time']-datetime.datetime.utcnow()-datetime.timedelta(seconds=10)}")
           time.sleep(1)
         # check action and activate route
+        self.drone.await_controls()
         self.check_action("pre takeoff", route["type"])
         self.ussp.activate_plan(route["plan ID"])
         # Launch drone

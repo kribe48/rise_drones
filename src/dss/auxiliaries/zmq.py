@@ -418,7 +418,7 @@ class Sub(_Socket):
     self.connect(subscribe_all)
 
   def connect(self, subscribe_all) -> None:
-    assert valid_ip(self._ip, localhost=True), f'bad ip address: {self._ip}'
+    #assert valid_ip(self._ip, localhost=True), f'bad ip address: {self._ip}'
     self._socket = self._context.socket(zmq.SUB)
     if subscribe_all:
       self._socket.setsockopt_string(zmq.SUBSCRIBE, '')

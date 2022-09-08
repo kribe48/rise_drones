@@ -370,8 +370,6 @@ class AppUsspMission():
       #Convert to internal representation
       route_wps = self.ussp.transform_plan(plan, use_altitude=True, ussp_alt_diff=self.ussp_alt_diff)
       #save route
-      print(f"USSP WPs: {plan}")
-      print(f"Route WPS: {route_wps}")
       route_ussp = {}
       route_ussp["route_wps"] = route_wps
       route_ussp["transform_current_wp"] = self.map_input_to_ussp_wps(route, route_wps)
@@ -381,7 +379,7 @@ class AppUsspMission():
       route_ussp["status"] = route["status"]
       if route_ussp["status"] == "pending":
         route_ussp["takeoff_height"] = min(plan[1]["position"][2] - plan[0]["position"][2], 30.0)
-        _logger.info(f"takeoff_height: {route_ussp['takeoff_height']}, route_wps : {route_wps}")
+        _logger.info(f"takeoff_height: {route_ussp['takeoff_height']}")
       self.ussp_routes.append(route_ussp)
       #Update takeoff time
       current_position = Waypoint(input_positions[-1].lat, input_positions[-1].lon, input_positions[-1].alt)

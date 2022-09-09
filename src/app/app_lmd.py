@@ -275,7 +275,7 @@ class AppLmd():
       if not self.ussp.accept_plan(plan_id):
         raise dss.auxiliaries.exception.Error
       #Convert to internal representation
-      wp_mission = self.ussp.transform_plan(plan, use_altitude=False)
+      wp_mission = self.ussp.transform_plan(plan, use_altitude=False, ussp_alt_diff=0.0)
       #save mission
       mission = {}
       mission["takeoff_height"] = plan[1]["position"][2] - plan[0]["position"][2]

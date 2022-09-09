@@ -84,7 +84,7 @@ class UsspClientLib:
     }
 
   @staticmethod
-  def transform_plan(plan, use_altitude):
+  def transform_plan(plan, use_altitude, ussp_alt_diff):
     '''
     Transforms a plan received from the USSP to a format that is compatible with the DSS
     '''
@@ -103,7 +103,7 @@ class UsspClientLib:
       dt = datetime.datetime.fromisoformat(plan[idx]["time"]) - datetime.datetime.fromisoformat(plan[idx-1]["time"])
       horizontal_speed = max(1.0, ds/dt.total_seconds())
       wp_mission[id_str] = {
-        "lat" : position[1], "lon": position[0], "alt": position[2], "alt_type": "amsl", "heading": "course", "speed": horizontal_speed
+        "lat" : position[1], "lon": position[0], "alt": position[2]-ussp_alt_diff, "alt_type": "amsl", "heading": "course", "speed": horizontal_speed
       }
       wp_id += 1
     return wp_mission
@@ -282,6 +282,8 @@ class UsspClientLib:
       return False
     try :
       ended = answer["status"] == "ended"
+      self._logger.info(f'USSP Plan ended status: {ended}')
     except KeyError:
+      self._logger.warning('Ended not in answer')
       ended = False
     return ended

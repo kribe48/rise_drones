@@ -93,8 +93,9 @@ class AppUsspMission():
     self.delta_r_max = dss.auxiliaries.config.config['app_ussp_mission']['delta_r_max']
     self.height_max = dss.auxiliaries.config.config['app_ussp_mission']['height_max']
     self.height_min = dss.auxiliaries.config.config['app_ussp_mission']['height_min']
+    self.takeoff_height = 20.0
     #
-    self.drone_data = {"pos": Waypoint(), "time": 0.0, "heading": 0.0, "velocity": [0.0, 0.0, 0.0]}
+    self.drone_data = {"pos": Waypoint(), "time": datetime.datetime.utcnow(), "heading": 0.0, "velocity": [0.0, 0.0, 0.0]}
     self.start_pos = Waypoint()
     self.start_pos_received = False
     self.drone_lla_lock = threading.Lock()
@@ -138,6 +139,7 @@ class AppUsspMission():
     _logger.info(f'App connecting to USSP: {self.ussp_ip}')
     self.ussp = dss.client.UsspClientLib(app_id, _context)
     self.ussp.connect(self.ussp_ip, self.ussp_req_port, self.ussp_pub_port, self.ussp_sub_port)
+    self.ussp_alt_diff = None
     self.application_state = "idle"
 
 
@@ -245,11 +247,15 @@ class AppUsspMission():
           self.drone_data["time"] = datetime.datetime.utcnow()
           self.drone_data["pos"].set_lla(msg['lat'], msg['lon'], msg['alt'])
           self.drone_data["heading"] = msg['heading']
-          self.drone_data["velocity"] = msg['velocity']
+          if "velocity" in msg:
+            self.drone_data["velocity"] = msg['velocity']
           self.drone_lla_lock.release()
           if not self.start_pos_received:
             self.start_pos.set_lla(msg['lat'], msg['lon'], msg['alt'])
             self.start_pos_received = True
+            #Calculate diff in altitude compared to USSP
+            self.ussp_alt_diff = self.ussp.query_ground_height(self.start_pos.lat, self.start_pos.lon) - self.start_pos.alt
+            _logger.info(f"Start position received, altitude difference: {self.ussp_alt_diff}")
         elif topic == 'battery':
           _logger.debug("Not implemented yet...")
         else:
@@ -263,20 +269,25 @@ class AppUsspMission():
     #Initialize NRID message
     self.ussp.initialize_nrid_msg(self.operator_id, self.uas_id)
     # Assume operator at initial point
-    self.ussp.update_nrid_operator_location(self.uas_id, self.start_pos.lat, self.start_pos.lon)
+    #self.ussp.update_nrid_operator_location(self.uas_id, self.start_pos.lat, self.start_pos.lon)
     # Set accuracies
     self.ussp.update_nrid_accuracies(self.uas_id, t_acc=4, alt_acc=4, h_acc=11, speed_acc=0)
+    # Wait for the altitude diff to be received
+    while self.ussp_alt_diff is None:
+      time.sleep(0.5)
     while self.alive:
       self.drone_lla_lock.acquire()
       drone_data = self.drone_data
       self.drone_lla_lock.release()
-      speed = math.sqrt(drone_data['velocity'][0]**2 + drone_data['velocity'][1]**2)
+      speed=0
+      if "velocity" in drone_data:
+        speed = math.sqrt(drone_data['velocity'][0]**2 + drone_data['velocity'][1]**2)
       if speed > 0.1:
         bearing = (180/math.pi)*math.atan2(drone_data['velocity'][1], drone_data['velocity'][0])
       else:
         bearing = drone_data['heading']
       height = self.drone_data["pos"].alt-self.start_pos.alt
-      self.ussp.update_nrid_state(self.uas_id, drone_data["time"], drone_data["pos"].lat, drone_data["pos"].lon, drone_data["pos"].alt, height=height, bearing=bearing, speed=speed, vert_speed=drone_data['velocity'][2])
+      self.ussp.update_nrid_state(self.uas_id, drone_data["time"], drone_data["pos"].lat, drone_data["pos"].lon, drone_data["pos"].alt+self.ussp_alt_diff, height=height, bearing=bearing, speed=speed, vert_speed=drone_data['velocity'][2])
       self.ussp.publish_nrid_msg(self.uas_id)
       time.sleep(1.0)
 
@@ -318,25 +329,34 @@ class AppUsspMission():
         self.input_routes[route["type"]] = new_input_route
     #Reset routes list and plan withdrawn flag
     self.plan_withdrawn = False
-    self.ussp_routes = {}
+    self.ussp_routes = []
   # Generate routes based on positions to visit
   def generate_ussp_routes(self):
-    # Request flight authorizations from the USSP
+    # Request flight authorizations from the USSP. Expects altitude as height over ground
     takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
     current_position = copy.deepcopy(self.drone_data["pos"])
+    current_position.alt -= (self.ussp.query_ground_height(current_position.lat, current_position.lon) - self.ussp_alt_diff)
     for route_type, route in self.input_routes.items():
       input_positions = [current_position]
+      #Add takeoff waypoint to USSP if mission is pending
+      if route["status"] == "pending":
+         takeoff_position = copy.deepcopy(current_position)
+         takeoff_position.alt += self.takeoff_height
+         input_positions.append(takeoff_position)
+
       for wp_name, wp in route.items():
         if "id" in wp_name:
-          input_positions.append(Waypoint(wp["lat"], wp["lon"], current_position.alt) )
-      use_altitude = False
-      #Check if the drone is currently in the air (plan withdrawn received)
-      if route["status"] == "running":
-        use_altitude = True
-        # Modify the last waypoint to be on the ground
-        input_positions[-1].alt = self.ussp.query_ground_height(input_positions[-1].lat, input_positions[-1].lon)
-        takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=10)
-      (plan_id, delay) = self.ussp.request_plan(self.operator_id, self.uas_id, epsg=4979, use_altitude=use_altitude, positions=input_positions, takeoff_time=takeoff_time, speed=route['speed'], max_speed=7.0, ascend_rate=2.0, descend_rate=1.0)
+          if wp["alt_type"] == 'relative':
+            alt = wp["alt"]
+          else:
+            alt = wp["alt"]
+          input_positions.append(Waypoint(wp["lat"], wp["lon"], alt) )
+      #Add waypoint on the ground
+      landing_position = copy.deepcopy(input_positions[-1])
+      landing_position.alt = 0.0
+      input_positions.append(landing_position)
+      takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=10)
+      (plan_id, delay) = self.ussp.request_plan(self.operator_id, self.uas_id, epsg=4979, use_altitude=True, positions=input_positions, takeoff_time=takeoff_time, speed=route['speed'], max_speed=7.0, ascend_rate=2.0, descend_rate=1.0)
       if plan_id is None or delay is None:
         raise dss.auxiliaries.exception.Error
       time.sleep(delay)
@@ -348,7 +368,7 @@ class AppUsspMission():
       if not self.ussp.accept_plan(plan_id):
         raise dss.auxiliaries.exception.Error
       #Convert to internal representation
-      route_wps = self.ussp.transform_plan(plan, use_altitude)
+      route_wps = self.ussp.transform_plan(plan, use_altitude=True, ussp_alt_diff=self.ussp_alt_diff)
       #save route
       route_ussp = {}
       route_ussp["route_wps"] = route_wps
@@ -359,7 +379,7 @@ class AppUsspMission():
       route_ussp["status"] = route["status"]
       if route_ussp["status"] == "pending":
         route_ussp["takeoff_height"] = min(plan[1]["position"][2] - plan[0]["position"][2], 30.0)
-        _logger.info(f"takeoff_height: {route_ussp['takeoff_height']}, route_wps : {route_wps}")
+        _logger.info(f"takeoff_height: {route_ussp['takeoff_height']}")
       self.ussp_routes.append(route_ussp)
       #Update takeoff time
       current_position = Waypoint(input_positions[-1].lat, input_positions[-1].lon, input_positions[-1].alt)
@@ -396,6 +416,7 @@ class AppUsspMission():
 
     # Setup info stream to DSS
     self.setup_dss_info_stream()
+    _logger.info("Setup dss info stream")
 
     self.uas_id = str(uuid.uuid1())
 
@@ -475,7 +496,7 @@ class AppUsspMission():
     reset_dss_srtl = True
     reset_geofence = True
     while self.alive and not self.start_pos_received:
-      _logger.debug("Waiting for the drone to stream its current position")
+      _logger.info("Waiting for the drone to stream its current position")
       time.sleep(0.5)
     # Start streaming NRID
     nrid_thread = threading.Thread(target=self._stream_nrid, daemon=True)
@@ -494,6 +515,7 @@ class AppUsspMission():
           _logger.info(f"Waiting to start route execution, time remaining: {route['takeoff_time']-datetime.datetime.utcnow()-datetime.timedelta(seconds=10)}")
           time.sleep(1)
         # check action and activate route
+        self.drone.await_controls()
         self.check_action("pre takeoff", route["type"])
         self.ussp.activate_plan(route["plan ID"])
         # Launch drone
@@ -511,7 +533,6 @@ class AppUsspMission():
           self.drone.set_vel_BODY(0,0,0,0)
           route["status"] = "running"
           self.application_state = "planning"
-          self.ussp.end_plan(route["plan ID"])
           (current_wp, _) = self.drone.get_currentWP()
           self.wp_in_old_list = route["transform_current_wp"][current_wp]
           self.update_input_routes()

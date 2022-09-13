@@ -152,7 +152,6 @@ class UsspClientLib:
         node = {"type": "2D path",
                 "position": [position.lon, position.lat]}
       plan.append(node)
-    print(plan)
     request = {"operator ID": operator_id,
                "UAS ID": uas_id,
                "EPSG": epsg,

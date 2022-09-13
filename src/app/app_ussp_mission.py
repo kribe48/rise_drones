@@ -359,6 +359,7 @@ class AppUsspMission():
       (plan_id, delay) = self.ussp.request_plan(self.operator_id, self.uas_id, epsg=4979, use_altitude=True, positions=input_positions, takeoff_time=takeoff_time, speed=route['speed'], max_speed=7.0, ascend_rate=2.0, descend_rate=1.0)
       if plan_id is None or delay is None:
         raise dss.auxiliaries.exception.Error
+      _logger.info(f"request plan sent, sleeping for {delay} seconds")
       time.sleep(delay)
       (status, plan) = self.ussp.get_plan(plan_id)
       _logger.info(f"status from get plan: {status}")

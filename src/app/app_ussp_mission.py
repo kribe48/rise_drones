@@ -57,7 +57,7 @@ class Waypoint():
 
 #--------------------------------------------------------------------#
 class AppUsspMission():
-  def __init__(self, app_ip, app_id, crm, mission, capabilities):
+  def __init__(self, app_ip, app_id, crm, mission, capabilities, negotiate_routes):
     # Create Client object
     self.drone = dss.client.Client(timeout=2000, exception_handler=None, context=_context)
 
@@ -141,6 +141,8 @@ class AppUsspMission():
     self.ussp.connect(self.ussp_ip, self.ussp_req_port, self.ussp_pub_port, self.ussp_sub_port)
     self.ussp_alt_diff = None
     self.application_state = "idle"
+    self.authorized_plans = []
+    self.negotiate_routes = negotiate_routes
 
 
 
@@ -296,13 +298,13 @@ class AppUsspMission():
     while self.alive:
       try:
         (_, msg) = self.ussp.receive_subscribe_data()
-        if "message" in msg:
-          if msg["message"] == "plan withdrawn":
-            _logger.warning("Plan withdrawn received from the USSP. Trying to replan!")
+        if "message" in msg and "plan ID" in msg:
+          if msg["message"] == "plan withdrawn" and msg["plan ID"] in self.authorized_plans:
+            _logger.warning(f"Plan withdrawn received from the USSP for plan {msg['plan ID']}. Trying to replan!")
             self.plan_withdrawn = True
             self.drone.app_abort = True
           else:
-            _logger.info("Unknown message from USSP received")
+            _logger.info("Plan withdrawn from already ended plan received, ignoring..")
       except:
         pass
 
@@ -330,12 +332,29 @@ class AppUsspMission():
     #Reset routes list and plan withdrawn flag
     self.plan_withdrawn = False
     self.ussp_routes = []
+  # Generate routes based on input, without negotiating with USSP
+  def generate_routes(self):
+    takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
+    for route_type, route in self.input_routes.items():
+      # Use mission as it is.
+      route_wps = {}
+      for wp_name, wp in route.items():
+        if "id" in wp_name:
+          route_wps[wp_name] = wp
+      route_final = {}
+      route_final["route_wps"] = route
+      route_final["takeoff_time"] = takeoff_time
+      route_final["type"] = route_type
+      route_final["status"] = route["status"]
+      self.ussp_routes.append(route_final)
+      takeoff_time = takeoff_time + datetime.timedelta(minutes=1)
   # Generate routes based on positions to visit
   def generate_ussp_routes(self):
     # Request flight authorizations from the USSP. Expects altitude as height over ground
     takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
     current_position = copy.deepcopy(self.drone_data["pos"])
     current_position.alt -= (self.ussp.query_ground_height(current_position.lat, current_position.lon) - self.ussp_alt_diff)
+    self.authorized_plans = []
     for route_type, route in self.input_routes.items():
       input_positions = [current_position]
       #Add takeoff waypoint to USSP if mission is pending
@@ -366,6 +385,7 @@ class AppUsspMission():
       if status != "authorized":
         raise dss.auxiliaries.exception.Error
       #Accept plan
+      self.authorized_plans.append(plan_id)
       if not self.ussp.accept_plan(plan_id):
         raise dss.auxiliaries.exception.Error
       #Convert to internal representation
@@ -505,13 +525,17 @@ class AppUsspMission():
     self.application_state = "planning"
     while not self.mission_complete:
       # Generate USSP routes
-      self.generate_ussp_routes()
+      if self.negotiate_routes:
+        self.generate_ussp_routes()
+      else:
+        self.generate_routes()
       self.application_state = "executing"
       for route in self.ussp_routes:
         self.initialize_waypoints(route["route_wps"], reset_geofence)
         # Only update geofence once
         reset_geofence = False
         #Wait for takeoff time
+        self.active_plan_id = route["plan ID"]
         while datetime.datetime.utcnow() + datetime.timedelta(seconds=10) < route["takeoff_time"]:
           _logger.info(f"Waiting to start route execution, time remaining: {route['takeoff_time']-datetime.datetime.utcnow()-datetime.timedelta(seconds=10)}")
           time.sleep(1)
@@ -546,7 +570,9 @@ class AppUsspMission():
         self.check_action("pre land", route["type"])
         self.drone.land()
         # End plan
-        self.ussp.end_plan(route["plan ID"])
+        if self.negotiate_routes:
+          self.ussp.end_plan(route["plan ID"])
+          self.authorized_plans.pop(route["plan ID"])
         route["status"] = "ended"
         # Check action depending on route type
         self.check_action("landed", route["type"])
@@ -566,6 +592,7 @@ def _main():
   parser.add_argument('--owner', type=str, help='id of the instance controlling app_noise - not used in this use case')
   parser.add_argument('--stdout', action='store_true', help='enables logging to stdout')
   parser.add_argument('--mission', type=str, required=True)
+  parser.add_argument('--without-negotiation', action='store_true', help='Disables the route negotiation step with the USSP', required=False)
   parser.add_argument('--capabilities', type=str, default=None, nargs='*', help='If any specific capability is required')
   args = parser.parse_args()
 
@@ -575,7 +602,7 @@ def _main():
   dss.auxiliaries.logging.configure('app_ussp_mission', stdout=args.stdout, rotating=True, loglevel=args.log, subdir=subnet)
   # Create the AppUsspMission class
   try:
-    app = AppUsspMission(args.app_ip, args.id, args.crm, args.mission, args.capabilities)
+    app = AppUsspMission(args.app_ip, args.id, args.crm, args.mission, args.capabilities, negotiate_routes=not args.without_negotiation)
   except dss.auxiliaries.exception.NoAnswer:
     _logger.error('Failed to instantiate application: Probably the CRM couldn\'t be reached')
     sys.exit()

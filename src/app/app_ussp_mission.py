@@ -141,7 +141,7 @@ class AppUsspMission():
     self.ussp.connect(self.ussp_ip, self.ussp_req_port, self.ussp_pub_port, self.ussp_sub_port)
     self.ussp_alt_diff = None
     self.application_state = "idle"
-    self.authorized_plans = []
+    self.authorized_plans = {}
     self.negotiate_routes = negotiate_routes
 
 
@@ -342,10 +342,11 @@ class AppUsspMission():
         if "id" in wp_name:
           route_wps[wp_name] = wp
       route_final = {}
-      route_final["route_wps"] = route
+      route_final["route_wps"] = route_wps
       route_final["takeoff_time"] = takeoff_time
       route_final["type"] = route_type
       route_final["status"] = route["status"]
+      route_final["takeoff_height"] = self.takeoff_height
       self.ussp_routes.append(route_final)
       takeoff_time = takeoff_time + datetime.timedelta(minutes=1)
   # Generate routes based on positions to visit
@@ -354,7 +355,7 @@ class AppUsspMission():
     takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
     current_position = copy.deepcopy(self.drone_data["pos"])
     current_position.alt -= (self.ussp.query_ground_height(current_position.lat, current_position.lon) - self.ussp_alt_diff)
-    self.authorized_plans = []
+    self.authorized_plans = {}
     for route_type, route in self.input_routes.items():
       input_positions = [current_position]
       #Add takeoff waypoint to USSP if mission is pending
@@ -381,11 +382,11 @@ class AppUsspMission():
       _logger.info(f"request plan sent, sleeping for {delay} seconds")
       time.sleep(delay)
       (status, plan) = self.ussp.get_plan(plan_id)
-      _logger.info(f"status from get plan: {status}")
+      _logger.info(f"status from get plan: {status} for {plan_id}")
       if status != "authorized":
         raise dss.auxiliaries.exception.Error
       #Accept plan
-      self.authorized_plans.append(plan_id)
+      self.authorized_plans[plan_id] = True
       if not self.ussp.accept_plan(plan_id):
         raise dss.auxiliaries.exception.Error
       #Convert to internal representation
@@ -498,6 +499,9 @@ class AppUsspMission():
     elif phase == "pre land":
       if route_type == 'camera route':
         self.drone.set_gimbal(0,0,0)
+      elif route_type == 'first responder':
+        #Hover above the Object of interest for 120 seconds
+        time.sleep(120.0)
     elif phase == "landed":
       if route_type == "drop off":
         self.drone.unload_package()
@@ -535,14 +539,14 @@ class AppUsspMission():
         # Only update geofence once
         reset_geofence = False
         #Wait for takeoff time
-        self.active_plan_id = route["plan ID"]
         while datetime.datetime.utcnow() + datetime.timedelta(seconds=10) < route["takeoff_time"]:
           _logger.info(f"Waiting to start route execution, time remaining: {route['takeoff_time']-datetime.datetime.utcnow()-datetime.timedelta(seconds=10)}")
           time.sleep(1)
         # check action and activate route
         self.drone.await_controls()
         self.check_action("pre takeoff", route["type"])
-        self.ussp.activate_plan(route["plan ID"])
+        if self.negotiate_routes:
+          self.ussp.activate_plan(route["plan ID"])
         # Launch drone
         if route["status"] == "pending":
           self.launch_drone(route["takeoff_height"], reset_dss_srtl)
@@ -568,7 +572,10 @@ class AppUsspMission():
         self.await_clearance_landing()
         #Land
         self.check_action("pre land", route["type"])
-        self.drone.land()
+        if route["type"] == "first responder":
+          self.drone.rtl()
+        else:
+          self.drone.land()
         # End plan
         if self.negotiate_routes:
           self.ussp.end_plan(route["plan ID"])

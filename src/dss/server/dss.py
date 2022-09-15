@@ -72,7 +72,6 @@ class Server:
     # application
     self._connected = False
 
-
     # Split crm connection string"
     if crm:
       (_, crm_port) = crm.split(':')
@@ -102,7 +101,7 @@ class Server:
     # all attributes are disabled by default
     self._pub_attributes = {'ATT':                   {'enabled': False, 'name': 'attitude'},
                             'LLA':                   {'enabled': False, 'name': 'location.global_frame'},
-                            'NED':                   {'enabled': False, 'name': 'location.local_frame'}, # 'location.local_frame'?
+                            'NED':                   {'enabled': False, 'name': 'location.local_frame'},
                             'XYZ':                   {'enabled': False, 'name': 'TODO'},
                             'photo_LLA':             {'enabled': False, 'name': 'TODO'},
                             'photo_XYZ':             {'enabled': False, 'name': 'TODO'},
@@ -196,6 +195,7 @@ class Server:
       answer = self._crm.register(self._dss_ip, self._serv_socket.port, type='dss', capabilities=self._capabilities)
       if dss.auxiliaries.zmq.is_ack(answer):
         self._dss_id = answer['id']
+        self._logger.info(f"Regitered to CRM, received id {answer['id']}")
       else:
         self._logger.error(f'register failed: {answer}')
         self.alive = False
@@ -1108,6 +1108,8 @@ class Server:
         elif not self._hexa.is_flight_mode('GUIDED'):
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for GUIDED mode...' % self._in_controls, end='\r')
+        elif not self._clearance_state == 'CLEARED':
+          print('[%s has the CONTROLS] Waiting for safety pilot to give clearance...' % self._in_controls, end='\r')
         elif self._hexa.get_channel(3) is None:
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for rc channel 3 to become available...' % self._in_controls, end='\r')
@@ -1117,8 +1119,6 @@ class Server:
         elif not self._connected:
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for APPLICATION to connect...' % self._in_controls, end='\r')
-        elif not self._clearance_state == 'CLEARED':
-          print('[%s has the CONTROLS] Waiting for safety pilot to give clearance...' % self._in_controls, end='\r')
         else:
           self._logger.info('APPLICATION got the the CONTROLS')
           self._hexa.set_expected_flight_mode('GUIDED')

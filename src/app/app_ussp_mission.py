@@ -354,7 +354,7 @@ class AppUsspMission():
     # Request flight authorizations from the USSP. Expects altitude as height over ground
     takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=40)
     current_position = copy.deepcopy(self.drone_data["pos"])
-    current_position.alt -= (self.ussp.query_ground_height(current_position.lat, current_position.lon) - self.ussp_alt_diff)
+    current_position.alt += self.ussp_alt_diff
     self.authorized_plans = {}
     for route_type, route in self.input_routes.items():
       input_positions = [current_position]
@@ -366,14 +366,16 @@ class AppUsspMission():
 
       for wp_name, wp in route.items():
         if "id" in wp_name:
+          #compensate for altitude diff
+          alt = wp['alt'] + self.ussp_alt_diff
+          #Transform relative to AMSL?
           if wp["alt_type"] == 'relative':
-            alt = wp["alt"]
-          else:
-            alt = wp["alt"]
+            alt += self.start_pos.alt
+
           input_positions.append(Waypoint(wp["lat"], wp["lon"], alt) )
       #Add waypoint on the ground
       landing_position = copy.deepcopy(input_positions[-1])
-      landing_position.alt = 0.0
+      landing_position.alt = self.ussp.query_ground_height(landing_position.lat, landing_position.lon)
       input_positions.append(landing_position)
       if route["status"] == 'running':
         takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=20)
@@ -524,7 +526,7 @@ class AppUsspMission():
     #Reset DSS SRTL and geofence only once
     reset_dss_srtl = True
     reset_geofence = True
-    while self.alive and not self.start_pos_received:
+    while self.alive and self.ussp_alt_diff is None:
       _logger.info("Waiting for the drone to stream its current position")
       time.sleep(0.5)
     # Start streaming NRID

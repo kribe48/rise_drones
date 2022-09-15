@@ -334,7 +334,7 @@ class AppUsspMission():
     self.ussp_routes = []
   # Generate routes based on input, without negotiating with USSP
   def generate_routes(self):
-    takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
+    takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=20)
     for route_type, route in self.input_routes.items():
       # Use mission as it is.
       route_wps = {}
@@ -352,7 +352,7 @@ class AppUsspMission():
   # Generate routes based on positions to visit
   def generate_ussp_routes(self):
     # Request flight authorizations from the USSP. Expects altitude as height over ground
-    takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
+    takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=40)
     current_position = copy.deepcopy(self.drone_data["pos"])
     current_position.alt -= (self.ussp.query_ground_height(current_position.lat, current_position.lon) - self.ussp_alt_diff)
     self.authorized_plans = {}
@@ -375,7 +375,8 @@ class AppUsspMission():
       landing_position = copy.deepcopy(input_positions[-1])
       landing_position.alt = 0.0
       input_positions.append(landing_position)
-      takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=10)
+      if route["status"] == 'running':
+        takeoff_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=20)
       (plan_id, delay) = self.ussp.request_plan(self.operator_id, self.uas_id, epsg=4979, use_altitude=True, positions=input_positions, takeoff_time=takeoff_time, speed=route['speed'], max_speed=7.0, ascend_rate=2.0, descend_rate=1.0)
       if plan_id is None or delay is None:
         raise dss.auxiliaries.exception.Error
@@ -402,10 +403,13 @@ class AppUsspMission():
       if route_ussp["status"] == "pending":
         route_ussp["takeoff_height"] = min(plan[1]["position"][2] - plan[0]["position"][2], 30.0)
         _logger.info(f"takeoff_height: {route_ussp['takeoff_height']}")
+      print(f"takeoff_time requested: {takeoff_time}, takeoff from USSP: {route_ussp['takeoff_time']}")
+      landing_time = datetime.datetime.fromisoformat(plan[-1]["time"])
+      route_ussp["landing_time"] = landing_time
       self.ussp_routes.append(route_ussp)
       #Update takeoff time
       current_position = Waypoint(input_positions[-1].lat, input_positions[-1].lon, input_positions[-1].alt)
-      takeoff_time = datetime.datetime.fromisoformat(plan[-1]["time"]) + datetime.timedelta(seconds=plan[-1]["time margin"]) + datetime.timedelta(seconds=10)
+      takeoff_time = landing_time + datetime.timedelta(seconds=plan[-1]["time margin"]) + datetime.timedelta(seconds=10)
 
   @staticmethod
   def map_input_to_ussp_wps(route, ussp_route_wps):
@@ -576,12 +580,14 @@ class AppUsspMission():
           self.drone.rtl()
         else:
           self.drone.land()
+        _logger.info(f"Landed at time: {datetime.datetime.utcnow()}, USSP landing time: {route['landing_time']}")
         # End plan
         if self.negotiate_routes:
           self.ussp.end_plan(route["plan ID"])
           self.authorized_plans.pop(route["plan ID"])
         route["status"] = "ended"
         # Check action depending on route type
+        self.drone.await_controls()
         self.check_action("landed", route["type"])
 
 

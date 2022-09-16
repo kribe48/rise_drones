@@ -1104,31 +1104,20 @@ class Server:
       # PILOT is in controls
       ######################
       if self._in_controls == 'PILOT':
-        # Look for handover to DSS, require:
+        # Look for PILOT handover to DSS, require:
         # 1. armable, 2. GUIDED, 3. Cleared state
         if not self._hexa.vehicle.is_armable:
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for vehicle to initialise...' % self._in_controls, end='\r')
-
         elif not self._hexa.is_flight_mode('GUIDED'):
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for GUIDED mode...' % self._in_controls, end='\r')
         elif not self._clearance_state == 'CLEARED':
           print('[%s has the CONTROLS] Waiting for safety pilot to give clearance...' % self._in_controls, end='\r')
-        # Hand over t0 DSS
-        else:
-          self._logger.info('DSS got the the CONTROLS')
-          self._hexa.set_expected_flight_mode('GUIDED')
-          self._in_controls = 'DSS'
-          self._hexa.gimbal_stow()
-          continue
-
-      # DSS is in controls
-      ####################
-      if self._in_controls == 'DSS':
-        # Look for handover to APPLICATION, require:
-        # 1. Connected to app, 2. gcs heartbeats if used, 3. thr to midstick if used.
-        if not self._connected:
+        # Pilot ready for hand over.
+        # Look for DSS ready for immidiate handover to APPLICATION, require:
+        # 1. Connected to app, 2. Gcs heartbeats if used, 3. THR to midstick if used.
+        elif not self._connected:
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for APPLICATION to connect...' % self._in_controls, end='\r')
         elif self.lost_link_to_gcs():
@@ -1143,17 +1132,24 @@ class Server:
         # Handover to APPLICATION
         else:
           self._logger.info('APPLICATION got the the CONTROLS')
+          self._hexa.set_expected_flight_mode('GUIDED')
           self._in_controls = 'APPLICATION'
+          self._hexa.gimbal_stow()
           continue
 
-        # Need to clarify this section
+      # DSS is in controls
+      ####################
+      if self._in_controls == 'DSS':
+        # If DSS is in controls without connected app, DSS will trigger RTL
+
+        # Monitor DSS is in controls without connected APP
         if self._task['fcn'] == 'rtl':
           if self._task_event.is_set():
             print('\033[K', end='\r') # clear to the end of line
             print('[%s has the CONTROLS] Smart RTL, %s' % (self._in_controls, self._hexa.status_msg), end='\r')
           else:
             self._logger.info('RTL completed. Waiting for PILOT to take CONTROLS')
-            continue
+            continue # This prevents any more messager from APP to be received.
         else:
           if self._task_event.is_set():
             self._hexa.abort_task = True

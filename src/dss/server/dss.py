@@ -1078,15 +1078,20 @@ class Server:
     attempts = 0
 
     while self.alive:
-      # check gcs heartbeats
-      ######################
+
+      #################################
+      ## In controls state machine
+      #################################
+
+      # Monitor gcs heartbeats
+      ########################
       if self._in_controls == 'APPLICATION' and self.lost_link_to_gcs():
         self._logger.error('Lost link to the gcs heartbeats; DSS taking the CONTROLS')
         self._in_controls = 'DSS'
         continue
 
-      # check flight mode
-      ###################
+      # Monitor if pilot changed flight mode
+      ######################################
       if self._in_controls in ('APPLICATION', 'DSS'):
         if not self._hexa.expected_flight_mode:
           mode = self._hexa.get_flight_mode()
@@ -1096,42 +1101,52 @@ class Server:
           self._clearance_state = 'WAITING' if self._clearance_check else 'CLEARED'
           continue
 
-      #################################
-      ## DSS In controls state machine
-      #################################
       # PILOT is in controls
-      ######
+      ######################
       if self._in_controls == 'PILOT':
+        # Look for handover to DSS, require:
+        # 1. armable, 2. GUIDED, 3. Cleared state
         if not self._hexa.vehicle.is_armable:
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for vehicle to initialise...' % self._in_controls, end='\r')
-        elif self.lost_link_to_gcs():
-          print('\033[K', end='\r') # clear to the end of line
-          print('[%s has the CONTROLS] Waiting for gcs heartbeats...' % self._in_controls, end='\r')
+
         elif not self._hexa.is_flight_mode('GUIDED'):
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for GUIDED mode...' % self._in_controls, end='\r')
         elif not self._clearance_state == 'CLEARED':
           print('[%s has the CONTROLS] Waiting for safety pilot to give clearance...' % self._in_controls, end='\r')
+        # Hand over t0 DSS
+        else:
+          self._logger.info('DSS got the the CONTROLS')
+          self._hexa.set_expected_flight_mode('GUIDED')
+          self._in_controls = 'DSS'
+          self._hexa.gimbal_stow()
+          continue
+
+      # DSS is in controls
+      ####################
+      if self._in_controls == 'DSS':
+        # Look for handover to APPLICATION, require:
+        # 1. Connected to app, 2. gcs heartbeats if used, 3. thr to midstick if used.
+        if not self._connected:
+          print('\033[K', end='\r') # clear to the end of line
+          print('[%s has the CONTROLS] Waiting for APPLICATION to connect...' % self._in_controls, end='\r')
+        elif self.lost_link_to_gcs():
+          print('\033[K', end='\r') # clear to the end of line
+          print('[%s has the CONTROLS] Waiting for gcs heartbeats...' % self._in_controls, end='\r')
         elif self._hexa.get_channel(3) is None:
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for rc channel 3 to become available...' % self._in_controls, end='\r')
         elif self._midstick_check and (not 1400 < self._hexa.get_channel(3) < 1600):
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for throttle to mid-stick...' % self._in_controls, end='\r')
-        elif not self._connected:
-          print('\033[K', end='\r') # clear to the end of line
-          print('[%s has the CONTROLS] Waiting for APPLICATION to connect...' % self._in_controls, end='\r')
+        # Handover to APPLICATION
         else:
           self._logger.info('APPLICATION got the the CONTROLS')
-          self._hexa.set_expected_flight_mode('GUIDED')
           self._in_controls = 'APPLICATION'
-          self._hexa.gimbal_stow()
           continue
 
-      # DSS is in controls
-      ########
-      if self._in_controls == 'DSS':
+        # Need to clarify this section
         if self._task['fcn'] == 'rtl':
           if self._task_event.is_set():
             print('\033[K', end='\r') # clear to the end of line
@@ -1150,7 +1165,7 @@ class Server:
             self._task_event.set()
 
       # APPLICATION is in controls
-      ########
+      ############################
       if self._in_controls == 'APPLICATION':
         if self._task_event.is_set():
           print('\033[K', end='\r') # clear to the end of line

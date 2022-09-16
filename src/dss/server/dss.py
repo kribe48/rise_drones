@@ -1096,7 +1096,10 @@ class Server:
           self._clearance_state = 'WAITING' if self._clearance_check else 'CLEARED'
           continue
 
-      # PILOT
+      #################################
+      ## DSS In controls state machine
+      #################################
+      # PILOT is in controls
       ######
       if self._in_controls == 'PILOT':
         if not self._hexa.vehicle.is_armable:
@@ -1126,7 +1129,7 @@ class Server:
           self._hexa.gimbal_stow()
           continue
 
-      # DSS
+      # DSS is in controls
       ########
       if self._in_controls == 'DSS':
         if self._task['fcn'] == 'rtl':
@@ -1146,7 +1149,7 @@ class Server:
             self._task = {'fcn': 'rtl'}
             self._task_event.set()
 
-      # APPLICATION
+      # APPLICATION is in controls
       ########
       if self._in_controls == 'APPLICATION':
         if self._task_event.is_set():

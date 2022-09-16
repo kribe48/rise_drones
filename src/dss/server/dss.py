@@ -927,6 +927,7 @@ class Server:
       elif self._clearance_state == 'HIGH':
         if value < 1500 :
           self._clearance_state = 'CLEARED'
+          self._logger.info('PILOT gave clearance via clearance switch')
 
 
   #############################################################################
@@ -1115,7 +1116,7 @@ class Server:
         elif not self._clearance_state == 'CLEARED':
           print('[%s has the CONTROLS] Waiting for safety pilot to give clearance...' % self._in_controls, end='\r')
         # Pilot ready for hand over.
-        # Look for DSS ready for immidiate handover to APPLICATION, require:
+        # Look for DSS ready for immidiate handover to APPLICATION, require: (DSS in controls without application triggers rtl)
         # 1. Connected to app, 2. Gcs heartbeats if used, 3. THR to midstick if used.
         elif not self._connected:
           print('\033[K', end='\r') # clear to the end of line

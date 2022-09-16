@@ -86,7 +86,7 @@ class CRM:
     ip = self._clients[client_name]['ip']
     port = self._clients[client_name]['port']
 
-    socket = dss.auxiliaries.zmq.Req(self._context, ip=ip, port=port, label=client_name)
+    socket = dss.auxiliaries.zmq.Req(self._context, ip=ip, port=port, label=client_name, timeout=2000)
 
     for x in range(3):
       self._logger.info(f'task_set_owner, try {x}')

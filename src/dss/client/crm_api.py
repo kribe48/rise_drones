@@ -27,7 +27,7 @@ class CRM:
     self._app_id = app_id
 
     # Create request socket, don't start heartbeat thread yet.
-    self._socket = dss.auxiliaries.zmq.Req(self._context, self._ip, self._port, label='crm', timeout=1000)
+    self._socket = dss.auxiliaries.zmq.Req(self._context, self._ip, self._port, label='crm', timeout=2000)
 
   def __del__(self):
     if hasattr(self, '_socket'): # this is sometimes needed if the __init__ function failed

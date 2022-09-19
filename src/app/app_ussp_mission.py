@@ -507,7 +507,11 @@ class AppUsspMission():
         self.drone.set_gimbal(0,0,0)
       elif route_type == 'first responder':
         #Hover above the Object of interest for 120 seconds
-        time.sleep(120.0)
+        start_time = datetime.datetime.utcnow()
+        hover_time = 120
+        while datetime.datetime.utcnow() < start_time + datetime.timedelta(seconds=hover_time) :
+          _logger.info(f"Hovering above object, time remaining: {start_time + datetime.timedelta(seconds=hover_time) - datetime.datetime.utcnow()}")
+          time.sleep(1.0)
     elif phase == "landed":
       if route_type == "drop off":
         self.drone.unload_package()
@@ -579,10 +583,10 @@ class AppUsspMission():
         #Land
         self.check_action("pre land", route["type"])
         if route["type"] == "first responder":
-          self.drone.rtl()
+          self.drone.dss_srtl(hover_time=5.0)
         else:
           self.drone.land()
-        _logger.info(f"Landed at time: {datetime.datetime.utcnow()}, USSP landing time: {route['landing_time']}")
+          _logger.info(f"Landed at time: {datetime.datetime.utcnow()}, USSP landing time: {route['landing_time']}")
         # End plan
         if self.negotiate_routes:
           self.ussp.end_plan(route["plan ID"])

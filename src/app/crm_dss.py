@@ -58,6 +58,8 @@ def _main():
   except KeyboardInterrupt:
     logging.warning('Shutdown due to keyboard interrupt')
     server.alive = False
+  #Let the process die gracefully
+  time.sleep(2.0)
 
 if __name__ == '__main__':
   _main()

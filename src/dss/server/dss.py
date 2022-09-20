@@ -1150,7 +1150,7 @@ class Server:
             print('[%s has the CONTROLS] Smart RTL, %s' % (self._in_controls, self._hexa.status_msg), end='\r')
           else:
             self._logger.info('RTL completed. Waiting for PILOT to take CONTROLS')
-            continue # This prevents any more messager from APP to be received, is this good?.
+            # continue # This prevents any more messager from APP to be received, is this good?.
         else:
           if self._task_event.is_set():
             self._hexa.abort_task = True

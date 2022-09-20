@@ -1150,7 +1150,6 @@ class Server:
             print('[%s has the CONTROLS] Smart RTL, %s' % (self._in_controls, self._hexa.status_msg), end='\r')
           else:
             self._logger.info('RTL completed. Waiting for PILOT to take CONTROLS')
-            # continue # This prevents any more messager from APP to be received, is this good?.
         else:
           if self._task_event.is_set():
             self._hexa.abort_task = True
@@ -1181,13 +1180,6 @@ class Server:
       except zmq.error.Again:
         _ = self._is_link_lost()
         continue
-
-      # This prevents an application to connect after application link is lost
-      # REVIEW, safe to remove?
-
-      #Check if link to application is lost
-      #if self._is_link_lost():
-      #  continue
 
       if not self._connected and self.from_owner(msg) and msg['id'] != 'crm':
         self._connected = True

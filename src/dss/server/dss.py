@@ -1240,4 +1240,7 @@ class Server:
       if fcn != 'heart_beat':
         self._logger.info("Replied: %s", answer)
 
+    #Unregister from CRM
+    if self._crm:
+      self._crm.unregister()
     self._logger.info('DSS Server exited correctly. Have a nice day!')

@@ -172,7 +172,7 @@ class CRM:
   def delStaleClients(self) -> list:
     clientsToDelete = list()
     for id_, client in self._clients.items():
-      if self._now - client['timestamp'] > 30: #seconds
+      if self._now - client['timestamp'] > 15: #seconds
         clientsToDelete.append(id_)
 
     for id_ in clientsToDelete:

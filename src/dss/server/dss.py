@@ -982,19 +982,21 @@ class Server:
     self._logger.info("MODEM: Network logger thread enabled")
 
     # Connect to modem on specified path
-    try:
-      self._modem = Modem("/dev/ttyUSB2")
-      self._logger.info('MODEM: Connected to modem on /dev/ttyUSB2')
-    except:
-      self._logger.info('MODEM: Could not find modem device, ttyUSB2')
-      # Try the other port
-      try:
-        self._modem = Modem("/dev/ttyUSB3")
-        self._logger.info('MODEM: Connected to modem on /dev/ttyUSB3')
-      except:
-        self._logger.info('MODEM: Could not find modem device, ttyUSB3')
-        self._logger.warning('MODEM: Cound not find mode device. Quit network logger thread')
-        return
+    dev_paths = [2,3]
+    connected=False
+    for dev_path in dev_paths:
+      device=f"/dev/serial/by-id/usb-Android_Android-if0{dev_path}-port0"
+      if not connected:
+        try:
+          self._modem = Modem(device)
+          self._logger.info(f'MODEM: Connected to modem on {device}')
+          connected=True
+        except:
+          self._logger.info(f'MODEM: Could not find modem device, {device}')
+
+    # None of the dev_paths works..
+    if not connected:
+      return
 
     # Set up Engineering mode
     # Set up reporting of cell id

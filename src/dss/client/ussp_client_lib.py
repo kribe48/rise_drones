@@ -44,7 +44,7 @@ class UsspClientLib:
     self._nrid_msgs = {}
 
 
-  def connect(self, ussp_ip, req_port, pub_port, sub_port, timeout=2000):
+  def connect(self, ussp_ip, req_port, pub_port, sub_port, timeout=5000):
     self._ussp_client = dss.client.UsspClientApi(self._context, self._app_id, ussp_ip, req_port, pub_port, sub_port, timeout)
 
   def subscribe_to_topic(self, topic):

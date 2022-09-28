@@ -592,7 +592,11 @@ class AppUsspMission():
           self.ussp.end_plan(route["plan ID"])
           self.authorized_plans.pop(route["plan ID"])
         route["status"] = "ended"
-        # Check action depending on route type
+        #Check if plan withdrawn during landing
+        if self.plan_withdrawn:
+          self.application_state == "planning"
+          self.update_input_routes()
+        # Check landing action depending on route type
         self.drone.await_controls()
         self.check_action("landed", route["type"])
 

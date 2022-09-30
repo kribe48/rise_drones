@@ -331,7 +331,8 @@ class Client:
       finally:
         rel_height = current_height-start_height
         print('Current height relative takeoff position: %5.1f m' % rel_height, end='\r')
-
+    #Sleep to make sure that drone is finished...
+    time.sleep(1.5)
     print('\033[K', end='\r') # clear to the end of line
 
 

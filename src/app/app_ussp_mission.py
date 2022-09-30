@@ -508,7 +508,7 @@ class AppUsspMission():
       elif route_type == 'first responder':
         #Hover above the Object of interest for 90 seconds
         start_time = datetime.datetime.utcnow()
-        hover_time = 90
+        hover_time = 60
         while datetime.datetime.utcnow() < start_time + datetime.timedelta(seconds=hover_time) :
           _logger.info(f"Hovering above object, time remaining: {start_time + datetime.timedelta(seconds=hover_time) - datetime.datetime.utcnow()}")
           time.sleep(1.0)

@@ -1257,8 +1257,10 @@ class Hexacopter:
     start_time = time.time()
     #Maximum time for takeoff is 2*takeoff_height
     max_time = 2*height
-    while self.is_flight_mode('GUIDED') and time.time() < start_time + max_time:
+    while self.is_flight_mode('GUIDED'):
       self._status_msg = 'altitude: %5.1f m' % self.vehicle.location.global_relative_frame.alt
+      if time.time() >= start_time + max_time:
+        self.logger.info('Take-off timeout reached, assuming takeoff complete..')
       if self.get_position_lla().alt >= height*0.9: #Trigger just below target alt.
         self.logger.info('Take-off target altitude reached')
         self._status_msg = ''

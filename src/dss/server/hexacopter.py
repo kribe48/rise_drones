@@ -1256,7 +1256,7 @@ class Hexacopter:
     #Make sure that takeoff is not stuck in the while loop
     start_time = time.time()
     #Maximum time for takeoff is 2*takeoff_height
-    max_time = 2*height
+    max_time = max(10.0, height-self.get_position_lla().alt)
     while self.is_flight_mode('GUIDED'):
       self._status_msg = 'altitude: %5.1f m' % self.vehicle.location.global_relative_frame.alt
       if time.time() >= start_time + max_time:

@@ -433,7 +433,7 @@ class Server:
     elif not self._hexa.flying_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
     elif self._task_event.is_set() and self._task_priority == MAX_PRIORITY:
-      answer = dss.auxiliaries.zmq.nack(fcn, 'A task with highest priority is running')
+      answer = dss.auxiliaries.zmq.nack(fcn, 'Task not prioritized')
     # Accept
     else:
       answer = dss.auxiliaries.zmq.ack(fcn)
@@ -1202,7 +1202,7 @@ class Server:
           priority = self._commands[fcn]['priority']
           # Nack reasons for all tasks with low priority
           if self._task_event.is_set() and (self._task_priority == MAX_PRIORITY or priority < self._task_priority):
-              answer = {'fcn': 'nack', 'call': fcn, 'description': 'another task with higher priority is still running'}
+              answer = {'fcn': 'nack', 'call': fcn, 'description': 'Task not prioritized'}
           # Accept task
           else:
             # Test request

@@ -473,11 +473,15 @@ class AppUsspMission():
       try:
         self.drone.fly_waypoints(start_wp)
       except dss.auxiliaries.exception.Nack as nack:
-        if nack.msg == 'Not flying':
+        if nack.msg == 'State is not flying':
           _logger.info("Pilot has landed")
+          break
+        elif nack.msg == 'Task not prioritized':
+          _logger.warning("Another task with higher priority is being executed by DSS, sleeping for 1 second")
+          time.sleep(1.0)
         else:
           _logger.info("Fly route was nacked %s", nack.msg)
-        break
+          break
       except dss.auxiliaries.exception.AbortTask:
         if self.plan_withdrawn:
           #USSP plan withdrawn received - need to replan!

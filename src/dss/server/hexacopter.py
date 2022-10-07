@@ -1240,7 +1240,7 @@ class Hexacopter:
     # Vehicle is armed, sleep to allow motors to spin up.
     # CRITICAL!!! Lowering the time.sleep period can cause crash.
     time.sleep(4)
-    # Set home location before takeoff
+    # Set home location before takeoff to initial takeoff location
     self.vehicle.home_location = self.home_location
     height = alt
     self.logger.info("Vehicle armed, taking off to height: %s", height)
@@ -1253,9 +1253,15 @@ class Hexacopter:
     heading_deg = self.vehicle.attitude.yaw/math.pi*180
     if heading_deg < 0:
       heading_deg += 360
-
+    #Make sure that takeoff is not stuck in the while loop
+    start_time = time.time()
+    #Maximum time for takeoff is 2*takeoff_height
+    max_time = max(10.0, height-self.get_position_lla().alt)
     while self.is_flight_mode('GUIDED'):
       self._status_msg = 'altitude: %5.1f m' % self.vehicle.location.global_relative_frame.alt
+      if time.time() >= start_time + max_time:
+        self.logger.info('Take-off timeout reached, assuming takeoff complete..')
+        break
       if self.get_position_lla().alt >= height*0.9: #Trigger just below target alt.
         self.logger.info('Take-off target altitude reached')
         self._status_msg = ''
@@ -1265,6 +1271,7 @@ class Hexacopter:
         self.logger.info('Drone is not armed. Check pre-arm checks')
         self._status_msg = ''
         break
+      time.sleep(0.1)
     #self.reset_dss_srtl()
 
   def task_ardupilot_rtl(self):

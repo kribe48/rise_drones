@@ -96,7 +96,7 @@ class Client:
     self._input_socket = dss.auxiliaries.zmq.Rep(self._context, '*', port, label='input-rep', timeout=self._timeout)
     self._logger.info(f"Starting input server on port {port}")
 
-  def raise_if_aborted(self):
+  def raise_if_aborted(self, app_allowed=True):
     # Test if controls where taken
     if self.in_controls and not self.is_who_controls('APPLICATION'):
       # Controls were taken
@@ -108,7 +108,9 @@ class Client:
 
     if self.app_abort:
       self.app_abort = False
-      raise dss.auxiliaries.exception.AbortTask()
+      # Raise error only if application is allowed to cause error
+      if app_allowed:
+        raise dss.auxiliaries.exception.AbortTask()
 
   def abort(self, msg=None, rtl=False):
     '''Aborts the mission and stops all threads'''
@@ -321,6 +323,7 @@ class Client:
     current_height = start_height
     while current_height < final_height * 0.9:
       time.sleep(1.0)
+      self.raise_if_aborted(app_allowed=False)
       try:
         current_height = self.get_height()
       except dss.auxiliaries.exception.Nack:
@@ -328,7 +331,8 @@ class Client:
       finally:
         rel_height = current_height-start_height
         print('Current height relative takeoff position: %5.1f m' % rel_height, end='\r')
-
+    #Sleep to make sure that drone is finished...
+    time.sleep(1.5)
     print('\033[K', end='\r') # clear to the end of line
 
 
@@ -426,7 +430,7 @@ class Client:
     self._dss.land()
     # Wait for rtl to land
     while self._dss.get_armed():
-      self.raise_if_aborted()
+      self.raise_if_aborted(app_allowed=False)
       print('Altitude: %5.1f m' % self.get_height(), end='\r')
       time.sleep(1.0)
     #Wait for the task to finish. Does not use raise if aborted since operator will take controls

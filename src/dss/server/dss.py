@@ -72,7 +72,6 @@ class Server:
     # application
     self._connected = False
 
-
     # Split crm connection string"
     if crm:
       (_, crm_port) = crm.split(':')
@@ -102,7 +101,7 @@ class Server:
     # all attributes are disabled by default
     self._pub_attributes = {'ATT':                   {'enabled': False, 'name': 'attitude'},
                             'LLA':                   {'enabled': False, 'name': 'location.global_frame'},
-                            'NED':                   {'enabled': False, 'name': 'location.local_frame'}, # 'location.local_frame'?
+                            'NED':                   {'enabled': False, 'name': 'location.local_frame'},
                             'XYZ':                   {'enabled': False, 'name': 'TODO'},
                             'photo_LLA':             {'enabled': False, 'name': 'TODO'},
                             'photo_XYZ':             {'enabled': False, 'name': 'TODO'},
@@ -196,6 +195,7 @@ class Server:
       answer = self._crm.register(self._dss_ip, self._serv_socket.port, type='dss', capabilities=self._capabilities)
       if dss.auxiliaries.zmq.is_ack(answer):
         self._dss_id = answer['id']
+        self._logger.info(f"Regitered to CRM, received id {answer['id']}")
       else:
         self._logger.error(f'register failed: {answer}')
         self.alive = False
@@ -433,7 +433,7 @@ class Server:
     elif not self._hexa.flying_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
     elif self._task_event.is_set() and self._task_priority == MAX_PRIORITY:
-      answer = dss.auxiliaries.zmq.nack(fcn, 'A task with highest priority is running')
+      answer = dss.auxiliaries.zmq.nack(fcn, 'Task not prioritized')
     # Accept
     else:
       answer = dss.auxiliaries.zmq.ack(fcn)
@@ -927,6 +927,7 @@ class Server:
       elif self._clearance_state == 'HIGH':
         if value < 1500 :
           self._clearance_state = 'CLEARED'
+          self._logger.info('PILOT gave clearance via clearance switch')
 
 
   #############################################################################
@@ -981,19 +982,21 @@ class Server:
     self._logger.info("MODEM: Network logger thread enabled")
 
     # Connect to modem on specified path
-    try:
-      self._modem = Modem("/dev/ttyUSB2")
-      self._logger.info('MODEM: Connected to modem on /dev/ttyUSB2')
-    except:
-      self._logger.info('MODEM: Could not find modem device, ttyUSB2')
-      # Try the other port
-      try:
-        self._modem = Modem("/dev/ttyUSB3")
-        self._logger.info('MODEM: Connected to modem on /dev/ttyUSB3')
-      except:
-        self._logger.info('MODEM: Could not find modem device, ttyUSB3')
-        self._logger.warning('MODEM: Cound not find mode device. Quit network logger thread')
-        return
+    dev_paths = [2,3]
+    connected=False
+    for dev_path in dev_paths:
+      device=f"/dev/serial/by-id/usb-Android_Android-if0{dev_path}-port0"
+      if not connected:
+        try:
+          self._modem = Modem(device)
+          self._logger.info(f'MODEM: Connected to modem on {device}')
+          connected=True
+        except:
+          self._logger.info(f'MODEM: Could not find modem device, {device}')
+
+    # None of the dev_paths works..
+    if not connected:
+      return
 
     # Set up Engineering mode
     # Set up reporting of cell id
@@ -1078,15 +1081,20 @@ class Server:
     attempts = 0
 
     while self.alive:
-      # check gcs heartbeats
-      ######################
+
+      #################################
+      ## In controls state machine
+      #################################
+
+      # Monitor gcs heartbeats
+      ########################
       if self._in_controls == 'APPLICATION' and self.lost_link_to_gcs():
         self._logger.error('Lost link to the gcs heartbeats; DSS taking the CONTROLS')
         self._in_controls = 'DSS'
         continue
 
-      # check flight mode
-      ###################
+      # Monitor if pilot changed flight mode
+      ######################################
       if self._in_controls in ('APPLICATION', 'DSS'):
         if not self._hexa.expected_flight_mode:
           mode = self._hexa.get_flight_mode()
@@ -1096,29 +1104,35 @@ class Server:
           self._clearance_state = 'WAITING' if self._clearance_check else 'CLEARED'
           continue
 
-      # PILOT
-      ######
+      # PILOT is in controls
+      ######################
       if self._in_controls == 'PILOT':
+        # Look for PILOT handover to DSS, require:
+        # 1. armable, 2. GUIDED, 3. Cleared state
         if not self._hexa.vehicle.is_armable:
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for vehicle to initialise...' % self._in_controls, end='\r')
-        elif self.lost_link_to_gcs():
-          print('\033[K', end='\r') # clear to the end of line
-          print('[%s has the CONTROLS] Waiting for gcs heartbeats...' % self._in_controls, end='\r')
         elif not self._hexa.is_flight_mode('GUIDED'):
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for GUIDED mode...' % self._in_controls, end='\r')
+        elif not self._clearance_state == 'CLEARED':
+          print('[%s has the CONTROLS] Waiting for safety pilot to give clearance...' % self._in_controls, end='\r')
+        # Pilot ready for hand over.
+        # Look for DSS ready for immidiate handover to APPLICATION, require: (DSS in controls without application triggers rtl)
+        # 1. Connected to app, 2. Gcs heartbeats if used, 3. THR to midstick if used.
+        elif not self._connected:
+          print('\033[K', end='\r') # clear to the end of line
+          print('[%s has the CONTROLS] Waiting for APPLICATION to connect...' % self._in_controls, end='\r')
+        elif self.lost_link_to_gcs():
+          print('\033[K', end='\r') # clear to the end of line
+          print('[%s has the CONTROLS] Waiting for gcs heartbeats...' % self._in_controls, end='\r')
         elif self._hexa.get_channel(3) is None:
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for rc channel 3 to become available...' % self._in_controls, end='\r')
         elif self._midstick_check and (not 1400 < self._hexa.get_channel(3) < 1600):
           print('\033[K', end='\r') # clear to the end of line
           print('[%s has the CONTROLS] Waiting for throttle to mid-stick...' % self._in_controls, end='\r')
-        elif not self._connected:
-          print('\033[K', end='\r') # clear to the end of line
-          print('[%s has the CONTROLS] Waiting for APPLICATION to connect...' % self._in_controls, end='\r')
-        elif not self._clearance_state == 'CLEARED':
-          print('[%s has the CONTROLS] Waiting for safety pilot to give clearance...' % self._in_controls, end='\r')
+        # Handover to APPLICATION
         else:
           self._logger.info('APPLICATION got the the CONTROLS')
           self._hexa.set_expected_flight_mode('GUIDED')
@@ -1126,16 +1140,18 @@ class Server:
           self._hexa.gimbal_stow()
           continue
 
-      # DSS
-      ########
+      # DSS is in controls
+      ####################
       if self._in_controls == 'DSS':
+        # If DSS is in controls without connected app, DSS will trigger RTL
+
+        # Monitor DSS is in controls without connected APP
         if self._task['fcn'] == 'rtl':
           if self._task_event.is_set():
             print('\033[K', end='\r') # clear to the end of line
             print('[%s has the CONTROLS] Smart RTL, %s' % (self._in_controls, self._hexa.status_msg), end='\r')
           else:
             self._logger.info('RTL completed. Waiting for PILOT to take CONTROLS')
-            continue
         else:
           if self._task_event.is_set():
             self._hexa.abort_task = True
@@ -1146,8 +1162,8 @@ class Server:
             self._task = {'fcn': 'rtl'}
             self._task_event.set()
 
-      # APPLICATION
-      ########
+      # APPLICATION is in controls
+      ############################
       if self._in_controls == 'APPLICATION':
         if self._task_event.is_set():
           print('\033[K', end='\r') # clear to the end of line
@@ -1165,9 +1181,6 @@ class Server:
           self._t_last_owner_msg = time.time()
       except zmq.error.Again:
         _ = self._is_link_lost()
-        continue
-      #Check if link to application is lost
-      if self._is_link_lost():
         continue
 
       if not self._connected and self.from_owner(msg) and msg['id'] != 'crm':
@@ -1189,7 +1202,7 @@ class Server:
           priority = self._commands[fcn]['priority']
           # Nack reasons for all tasks with low priority
           if self._task_event.is_set() and (self._task_priority == MAX_PRIORITY or priority < self._task_priority):
-              answer = {'fcn': 'nack', 'call': fcn, 'description': 'another task with higher priority is still running'}
+              answer = {'fcn': 'nack', 'call': fcn, 'description': 'Task not prioritized'}
           # Accept task
           else:
             # Test request
@@ -1221,4 +1234,7 @@ class Server:
       if fcn != 'heart_beat':
         self._logger.info("Replied: %s", answer)
 
+    #Unregister from CRM
+    if self._crm:
+      self._crm.unregister()
     self._logger.info('DSS Server exited correctly. Have a nice day!')

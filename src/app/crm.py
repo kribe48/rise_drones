@@ -86,7 +86,7 @@ class CRM:
     ip = self._clients[client_name]['ip']
     port = self._clients[client_name]['port']
 
-    socket = dss.auxiliaries.zmq.Req(self._context, ip=ip, port=port, label=client_name)
+    socket = dss.auxiliaries.zmq.Req(self._context, ip=ip, port=port, label=client_name, timeout=2000)
 
     for x in range(3):
       self._logger.info(f'task_set_owner, try {x}')
@@ -172,12 +172,18 @@ class CRM:
   def delStaleClients(self) -> list:
     clientsToDelete = list()
     for id_, client in self._clients.items():
-      if self._now - client['timestamp'] > 30: #seconds
+      if self._now - client['timestamp'] > 15: #seconds
         clientsToDelete.append(id_)
 
     for id_ in clientsToDelete:
       timestamp = self._clients[id_]["timestamp"]
       self._logger.warning(f'deleting {id_} {self._clients[id_]}')
+
+      # If id_ (to be deleted) is owner of other client, something is wrong, write to log
+      for all_id, all_client in self._clients.items():
+        if all_client['owner'] == id_:
+         self._logger.warning(f'CRM is deleting app {id_} that is owner of dss {all_client}')
+
       del self._clients[id_]
       self._logger.info(f'client {id_} got removed - it was inactive for {self._now - timestamp} seconds')
 

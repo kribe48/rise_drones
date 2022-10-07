@@ -35,3 +35,6 @@ If you would want to contribute to RISE drone system please take a look at [the 
 
 ## License
 RISE drone system is realeased under the [BSD 3-Clause License](https://opensource.org/licenses/BSD-3-Clause)
+
+## Documentation
+See Readme in doc folder for documentation.

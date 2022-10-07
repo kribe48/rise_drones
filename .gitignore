@@ -10,3 +10,6 @@ __pycache__/
 /src/app/clients.json
 /src/app/log/
 /src/dev/log/
+
+/doc/build/
+/doc/source/*.inc

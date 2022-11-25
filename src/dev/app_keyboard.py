@@ -33,10 +33,12 @@ class KeyboardClient(dss.client.Client):
   # Set up the sockets
   def setup_dss_sockets(self, dss_ip):
     answer = self._dss.get_info()
-    self._info_thread = threading.Thread(target=self._main_info_dss, args=[dss_ip, answer['info_pub_port']], daemon=True)
-    self._info_thread.start()
-    self._data_thread = threading.Thread(target=self._main_data_dss, args=[dss_ip, answer['data_pub_port']], daemon=True)
-    self._data_thread.start()
+    if answer['info_pub_port']:
+      self._info_thread = threading.Thread(target=self._main_info_dss, args=[dss_ip, answer['info_pub_port']], daemon=True)
+      self._info_thread.start()
+    if answer['data_pub_port']:
+      self._data_thread = threading.Thread(target=self._main_data_dss, args=[dss_ip, answer['data_pub_port']], daemon=True)
+      self._data_thread.start()
 
   # Helper method register
   def register_to_crm(self):
@@ -72,7 +74,7 @@ class KeyboardClient(dss.client.Client):
   # Thread that prints subscribed data
   def _main_info_dss(self, ip, port):
     _info_socket = dss.auxiliaries.zmq.Sub(self._context, ip, port, 'info ' + self._crm.app_id)
-    while _info_socket:
+    while _info_socket and self._dss is not None:
       try:
         (topic, msg) = _info_socket.recv()
 
@@ -92,6 +94,8 @@ class KeyboardClient(dss.client.Client):
           print("Going towards wp: " + msg['currentWP'] + ", final wp is: " + msg['finalWP'] + "\r")
         elif topic == "battery":
           print(f'Battery: remaining_time: {msg["remaining_time"]}, voltage: {msg["voltage"]} \r')
+        elif topic == "STATE":
+          print(f'lat: {msg["lat"]}, lon: {msg["lon"]}, alt: {msg["alt"]}, heading{msg["heading"]}, agl:{msg["agl"]}, vel_n:{msg["vel_n"]}, vele_e{msg["vel_e"]}, vel_d{msg["vel_d"]}, gnss_state{msg["gnss_state"]} \r')
         else:
           print("Topic not recognized on info link: ", (topic, msg), '\r')
       except:
@@ -100,7 +104,7 @@ class KeyboardClient(dss.client.Client):
   # Thread that reads subscribed data
   def _main_data_dss(self, ip, port):
     _data_socket = dss.auxiliaries.zmq.Sub(self._context, ip, port, 'data ' + self._crm.app_id)
-    while _data_socket:
+    while _data_socket and self._dss is not None:
       try:
         (topic, msg) = _data_socket.recv()
 
@@ -121,6 +125,7 @@ class KeyboardClient(dss.client.Client):
   def main(self):
     gimbal_pitch = 0
     att = False
+    state = False
     photo_lla = False
     photo_xyz = False
     battery = False
@@ -306,6 +311,7 @@ class KeyboardClient(dss.client.Client):
           print("  [w] up")
           print("  [W] set_alt 20")
           print("  [z] toggle data stream: currentWP")
+          print("  [Z] toggle data stream: STATE")
           print("  [x] toggle data stream: ATT")
           print("  [c] toggle data stream: XYZ")
           print("  [C] toggle data stream: photo_XYZ")
@@ -313,6 +319,7 @@ class KeyboardClient(dss.client.Client):
           print("  [b] toggle data stream: LLA")
           print("  [B] toggle data stream: photo_LLA")
           print("  [V] toggle data stream: battery")
+
 
         elif key == 'a':
           print("set_vel_BODY: neg yawrate")
@@ -416,7 +423,8 @@ class KeyboardClient(dss.client.Client):
           print("Abort, unregister (CRM) and disconnect (DSS)")
           if self._dss is not None:
             self._crm.release_drone(self._drone_name)
-            self.close_dss_socket()
+            self._dss._socket.close()
+            self._dss = None
           self._crm.unregister()
           self._alive = False
           return
@@ -445,6 +453,15 @@ class KeyboardClient(dss.client.Client):
             print("enable data stream: currentWP")
             self._dss.data_stream('currentWP', True)
             currentWP = True
+        elif key == 'Z':
+          if state:
+            print("disable data stream: STATE")
+            self._dss.data_stream('STATE', False)
+            state = False
+          else:
+            print("enable data stream: STATE")
+            self._dss.data_stream('STATE', True)
+            state = True
         elif key == 'x':
           if att:
             print("disable data stream: ATT")
@@ -537,20 +554,22 @@ class KeyboardClient(dss.client.Client):
             else:
               self._drone_name = answer['id']
               time.sleep(1.0)
-              self.connect(answer['ip'], answer['port'])
+              self.connect(answer['ip'], answer['port'], self._crm.app_id)
+              self.setup_dss_sockets(answer['ip'])
               print(f"Successfully connected to drone: [{self._drone_name}]")
         elif key == '6':
           if self._dss is not None:
             print("Already connected to a drone")
           else:
-            print("Trying to connect to drone with capability: [LMD, RTK]")
+            print("Trying to connect to drone with capabilities: [LMD, RTK]")
             answer = self._crm.get_drone(capabilities=['LMD', 'RTK'])
             if not dss.auxiliaries.zmq.is_ack(answer, 'get_drone'):
-              print("No available drone with capability: [LMD, RTK]")
+              print("No available drone with capabilities: [LMD, RTK]")
             else:
               self._drone_name = answer['id']
               time.sleep(1.0)
-              self.connect(answer['ip'], answer['port'])
+              self.connect(answer['ip'], answer['port'], self._crm.app_id)
+              self.setup_dss_sockets(answer['ip'])
               print(f"Successfully connected to drone: [{self._drone_name}]")
         elif key == '7':
           if self._dss is not None:
@@ -569,7 +588,8 @@ class KeyboardClient(dss.client.Client):
             else:
               # Close the DSS socket such that no heartbeat messages are sent.
               print(f"The drone with id {self._drone_name} has successfully been released")
-              self.close_dss_socket()
+              self._dss._socket.close()
+              self._dss = None
         elif key == '9':
           if self._dss is None:
             print("No connected drone")

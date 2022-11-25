@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 '''
-APP "app_mission"
+APP "app angel sim"
 
-This app is used to perform a mission. Actions depend on the type of mission to be performed
+
 '''
 
 import argparse
@@ -29,33 +29,33 @@ __status__ = 'development'
 
 #--------------------------------------------------------------------#
 
-_logger = logging.getLogger('dss.app_mission')
+_logger = logging.getLogger('dss.app_angel_sim')
 _context = zmq.Context()
 
 #--------------------------------------------------------------------#
 # App mission - README.
-# This application is used to perform a mission. Input
-# parameters are:
-# 1. start_wp : Where the drone should start
-# 2. mission: The json-file containing the mission
-# 3. capabilities: List of capabilities required to perform the mission
-
-#
-# The application to connect to crm and allocate a drone
-# (if available), it also shows how you can make the drone publish
-# information and how to subscribe to it.
+#This app is used to
+#1. Obtain a simulated drone
+#2. Start app_skara and request "follow me" with the ip/port to the simulated drone
+#2. Fly the "Skara Skyddsängel" mission to simulate a cyclist
+#3. Land the simulated drone
+# The input parameters are
+# 1. mission: The json-file containing the mission
+# 2. capabilities: List of capabilities required to perform the mission
 # Quit application by calling kill() or Ctrl+C
 #
 # #--------------------------------------------------------------------#
 
-class AppMission():
+class AppAngelSim():
   # Init
-  def __init__(self, app_ip, app_id, crm, start_wp, capabilities, mission_type):
+  def __init__(self, app_ip, app_id, crm, drone_capabilities):
     # Create Client object
     self.drone = dss.client.Client(timeout=2000, exception_handler=None, context=_context)
+    self.drone_ip = None
+    self.drone_info_port = None
 
     # Create CRM object
-    self.crm = dss.client.CRM(_context, crm, app_name='app_mission.py', desc='Mission application', app_id=app_id)
+    self.crm = dss.client.CRM(_context, crm, app_name='app_angel_sim.py', desc='Angel sim application', app_id=app_id)
 
     self._alive = True
     self._dss_data_thread = None
@@ -66,15 +66,12 @@ class AppMission():
     # counter for transferred photos
     self.transferred = 0
 
-    # parameter for start wp
-    self.start_wp = start_wp
     self.start_wp_reached = False
 
     self._app_ip = app_ip
     self.drone_data = None
-    # capabilities
-    self.capabilities = capabilities
-    self.mission_type = mission_type
+    # capabilities for the requested drone
+    self.drone_capabilities = drone_capabilities
 
     # The application sockets
     # Use ports depending on subnet used to pass RISE firewall
@@ -92,7 +89,7 @@ class AppMission():
 
     # All nack reasons raises exception, registration is successful
     _logger.info('App %s listening on %s:%d', self.crm.app_id, self._app_socket.ip, self._app_socket.port)
-    _logger.info(f'App_template_photo_mission registered with CRM: {self.crm.app_id}')
+    _logger.info(f'App_angel_sim registered with CRM: {self.crm.app_id}')
 
     # Update socket labels with received id
     self._app_socket.add_id_to_label(self.crm.app_id)
@@ -176,31 +173,20 @@ class AppMission():
 # Setup the DSS info stream thread
   def setup_dss_info_stream(self):
     #Get info port from DSS
-    info_port = self.drone.get_port('info_pub_port')
-    if info_port:
+    self.drone_info_port = self.drone.get_port('info_pub_port')
+    if self.drone_info_port:
       self._dss_info_thread = threading.Thread(
-        target=self._main_info_dss, args=[self.drone._dss.ip, info_port])
+        target=self._main_info_dss, args=[self.drone_ip, self.drone_info_port])
       self._dss_info_thread_active = True
       self._dss_info_thread.start()
-
-#--------------------------------------------------------------------#
-# Setup the DSS data stream thread
-  def setup_dss_data_stream(self):
-    #Get data port from DSS
-    data_port = self.drone.get_port('data_pub_port')
-    if data_port:
-      self._dss_data_thread = threading.Thread(
-        target=self._main_data_dss, args=[self.drone._dss.ip, data_port])
-      self._dss_data_thread_active = True
-      self._dss_data_thread.start()
 
 #--------------------------------------------------------------------#
 # The main function for subscribing to info messages from the DSS.
   def _main_info_dss(self, ip, port):
     # Enable LLA stream
-    # self.drone._dss.data_stream('LLA', True)
+    self.drone.enable_data_stream('LLA')
     # Enable waypoint subscription
-    self.drone.enable_data_stream('currentWP')
+    #self.drone.enable_data_stream('currentWP')
     # Create info socket and start listening thread
     info_socket = dss.auxiliaries.zmq.Sub(_context, ip, port, "info " + self.crm.app_id)
     while self._dss_info_thread_active:
@@ -210,119 +196,79 @@ class AppMission():
           self.drone_data = msg
         elif topic == 'battery':
           _logger.info('Remaining battery time: %s seconds', msg["remaining_time"])
-        elif topic == 'currentWP':
-          current_wp = int(msg['currentWP'])
-          if current_wp == self.start_wp+1 and not self.start_wp_reached:
-            self.start_wp_reached = True
-            self.perform_action("at start_wp")
-            #start wp reached, start continuous photo
-            _logger.info('Start waypoint reached')
-
-          elif current_wp == -1:
-            _logger.info('Mission is completed')
-          else:
-            _logger.info('Going to wp %d, final wp is %d', current_wp, int(msg["finalWP"]))
         else:
-          _logger.info('Topic not recognized on info link: %s', topic)
+          _logger.debug('Topic not recognized on info link: %s', topic)
       except:
         pass
     info_socket.close()
     _logger.info("Stopped thread and closed info socket")
+  #--------------------------------------------------------------------#
+  def setup_app_skara_socket(self, skara_id):
+    #Find all applications
+    app_skara_found = False
+    while not app_skara_found:
+      answer = self.crm.clients(filter=skara_id)
+      _logger.info(answer)
+      if skara_id in answer['clients']:
+        client = answer['clients'][skara_id]
+        if client['ip'] and client['port']:
+          self._app_skara_socket = dss.auxiliaries.zmq.Req(_context, client['ip'], client['port'], label='app-skara-req', timeout=2000)
+          self._app_skara_socket.start_heartbeat(self.crm.app_id)
+          app_skara_found = True
+      if not app_skara_found:
+        _logger.info(f'App_skara not found, sleeping for 2 seconds')
+        time.sleep(2.0)
 
-#--------------------------------------------------------------------#
-# The main function for subscribing to data messages from the DSS.
-  def _main_data_dss(self, ip, port):
-    # Create data socket and start listening thread
-    data_socket = dss.auxiliaries.zmq.Sub(_context, ip, port, "data " + self.crm.app_id)
-    while self._dss_data_thread_active:
-      try:
-        (topic, msg) = data_socket.recv()
-        if topic in ('photo', 'photo_low'):
-          data = dss.auxiliaries.zmq.string_to_bytes(msg["photo"])
-          photo_filename = msg['metadata']['filename']
-          dss.auxiliaries.zmq.bytes_to_image(photo_filename, data)
-          json_filename = photo_filename[:-4] + ".json"
-          dss.auxiliaries.zmq.save_json(json_filename, msg['metadata'])
-          _logger.info("Photo saved to " + msg['metadata']['filename']  + "\r")
-          _logger.info("Photo metadata saved to " + json_filename + "\r")
-          self.transferred += 1
-        else:
-          _logger.info("Topic not recognized on data link: %s", topic)
-      except:
-        pass
-    data_socket.close()
-    _logger.info("Stopped thread and closed data socket")
-
-  def perform_action(self, phase):
-    if phase == "post takeoff":
-      self.drone.reset_dss_srtl()
-      if self.mission_type == "continuous_photo":
-        self.drone.set_gimbal(0, -90, 0)
-    if phase == "at start_wp":
-      if self.mission_type == "continuous_photo":
-        _logger.info("Enabling continuous photo")
-        self.drone.photo_continous_photo(enable=True, period=2, publish="off")
-    elif phase == "aborted":
-      if self.mission_type == "continuous_photo":
-        self.disable_continuous_photo()
-    elif phase == "landed":
-      if self.mission_type == "continuous_photo":
-        # Save metadata to file
-        json_metadata = self.drone.get_metadata(ref='LLA', index='all')
-        with open('metadata_LLA.json', "w") as fh:
-          fh.write(json.dumps(json_metadata, indent=4))
-        _logger.info('Metadata saved to metadata_LLA.json')
-    elif phase == "mission complete":
-      if self.mission_type == "continuous_photo":
-        self.perform_action("rtl")
-      elif self.mission_type != "continous_photo":
-        self.perform_action("dss srtl")
-    elif phase == "rtl":
-      _logger.info("Autopilot rtl, will land straight down if within 20m from init point")
-      self.drone.rtl()
-      if self.mission_type == "continuous_photo":
-        self.disable_continuous_photo()
-    elif phase == "dss srtl":
-      _logger.info("DSS SRTL, will track flown waypoints back and land")
-      self.drone.dss_srtl(2)
-
-  def disable_continuous_photo(self):
-    _logger.info("Disabling continuous photo")
-    self.drone.photo_continous_photo(enable=False)
-    time.sleep(2.0)
-    #Download one low res photo to update metadata with filenames
-    try:
-      self.drone.photo_download('latest', 'low')
-      time.sleep(1.0)
-    except dss.auxiliaries.exception.Nack:
-      _logger.warning("Unable to download latest photo!!!")
-
-
+  def send_follow_her(self, enable):
+    dss_id = self.drone.get_id()
+    # Create message
+    call = 'follow_her'
+    msg = {'fcn': call, 'id': self.crm.app_id, 'enable': enable, 'target_id': dss_id, 'capabilities': ['SPOTLIGHT', 'SIM']}
+    answer = self._app_skara_socket.send_and_receive(msg)
+    # handle nack
+    if not dss.auxiliaries.zmq.is_ack(answer, call):
+      raise dss.auxiliaries.exception.Nack(dss.auxiliaries.zmq.get_nack_reason(answer), fcn=call)
+    # return
+    #
+    return
   #--------------------------------------------------------------------#
   # Main function
   def main(self, mission):
+    #Launch app skara
+    answer = self.crm.launch_app('app_skara.py')
+    if dss.auxiliaries.zmq.is_nack(answer):
+      _logger.error('Unable to launch app_skara')
+    # Setup connection to app_skara
+    self.setup_app_skara_socket(answer['id'])
+    # Get a drone with the right capabilities
+    answer = self.crm.get_drone(capabilities=self.drone_capabilities)
 
-    # Get a drone
-    answer = self.crm.get_drone(capabilities=self.capabilities)
     if dss.auxiliaries.zmq.is_nack(answer):
       _logger.error('Did not receive a drone: %s', dss.auxiliaries.zmq.get_nack_reason(answer))
       return
 
     # Connect to the drone, set app_id in socket
+    self.drone_ip = answer['ip']
     try:
-      self.drone.connect(answer['ip'], answer['port'], app_id=self.crm.app_id)
+      self.drone.connect(self.drone_ip, answer['port'], app_id=self.crm.app_id)
       _logger.info("Connected as owner of drone: [%s]", self.drone._dss.dss_id)
     except dss.auxiliaries.exception.Nack:
       _logger.error("Failed to connect as owner, check crm")
       return
-
     # Setup info and data stream to DSS
     self.setup_dss_info_stream()
-    #self.setup_dss_data_stream()
 
     # Send a command to the connected drone and print the result
     _logger.info(self.drone._dss.get_info())
 
+    # Request app_skara to follow the drone
+    self.send_follow_her(enable=True)
+    # Wait for other drones to launch
+    sleep_time = 60
+    start_time = time.time()
+    while time.time() < start_time + sleep_time:
+      _logger.info(f"Waiting for drones to start, time remaining: {start_time + sleep_time - time.time()}")
+      time.sleep(1.0)
     # Request controls from PILOT
     _logger.info("Requesting controls")
     self.drone.await_controls()
@@ -330,7 +276,7 @@ class AppMission():
 
     # Initialization
     self.drone.try_set_init_point('drone')
-    self.drone.set_geofence(6, 230, 650)
+    self.drone.set_geofence(1, 30, 1000)
 
     # Upload mission
     if "lat" in mission["id0"]:
@@ -340,17 +286,17 @@ class AppMission():
 
     # take-off
     _logger.info("Take off")
-    self.drone.arm_and_takeoff(min(30, mission["id0"]["alt"]))
-    self.perform_action("post takeoff")
+    self.drone.arm_and_takeoff(max(2.5, min(30, mission["id0"]["alt"])))
+    self.drone.reset_dss_srtl()
     # Fly waypoints, allow PILOT intervention.
-    current_wp = self.start_wp
+    current_wp = 0
     while True:
       try:
         self.drone.fly_waypoints(current_wp)
+        self.drone.land()
       except dss.auxiliaries.exception.Nack as nack:
         if nack.msg == 'Not flying':
           _logger.info("Pilot has landed")
-          self.perform_action("aborted")
         else:
           _logger.warning('Fly mission was nacked: %s', nack.msg)
         break
@@ -366,17 +312,15 @@ class AppMission():
         # Mission is completed
         break
 
-    # Trigger mission complete if not already on ground (PILOT landed)
+    self.send_follow_her(enable=False)
+    # rtl if not already on ground
     if self.drone.is_armed():
-      self.perform_action("mission complete")
-
-    # Landed
-    self.perform_action("landed")
+      self.drone.rtl()
 
 #--------------------------------------------------------------------#
 def _main():
   # parse command-line arguments
-  parser = argparse.ArgumentParser(description='APP "app map"', allow_abbrev=False, add_help=False)
+  parser = argparse.ArgumentParser(description='APP "app angel sim"', allow_abbrev=False, add_help=False)
   parser.add_argument('-h', '--help', action='help', help=argparse.SUPPRESS)
   parser.add_argument('--app_ip', type=str, help='ip of the app', required=True)
   parser.add_argument('--capabilities', type=str, default=None, nargs='*', help='If any specific capability is required')
@@ -384,20 +328,17 @@ def _main():
   parser.add_argument('--crm', type=str, help='<ip>:<port> of crm', required=True)
   parser.add_argument('--log', type=str, default='debug', help='logging threshold')
   parser.add_argument('--mission', type=str, default='Mission_lla.json')
-  parser.add_argument('--mission_type', type=str, default='survey', help='The type of mission to be performed. Decides what actions to be performed during the mission')
   parser.add_argument('--owner', type=str, help='id of the instance controlling the app- not used in this use case')
-  parser.add_argument('--start_wp', type=int, default=0, help='Where to start the mission')
   parser.add_argument('--stdout', action='store_true', help='enables logging to stdout')
   args = parser.parse_args()
 
   # Identify subnet to sort log files in structure
   subnet = dss.auxiliaries.zmq.get_subnet(ip=args.app_ip)
   # Initiate log file
-  dss.auxiliaries.logging.configure('app_mission', stdout=args.stdout, rotating=True, loglevel=args.log, subdir=subnet)
-
+  dss.auxiliaries.logging.configure('app_angel_sim', stdout=args.stdout, rotating=True, loglevel=args.log, subdir=subnet)
   # Create the PhotoMission class
   try:
-    app = AppMission(args.app_ip, args.id, args.crm, args.start_wp, args.capabilities, args.mission_type)
+    app = AppAngelSim(args.app_ip, args.id, args.crm, args.capabilities)
   except dss.auxiliaries.exception.NoAnswer:
     _logger.error('Failed to instantiate application: Probably the CRM couldn\'t be reached')
     sys.exit()
@@ -431,7 +372,6 @@ def _main():
     app.kill()
   except:
     _logger.error(f'unexpected exception\n{traceback.format_exc()}')
-
 
 #--------------------------------------------------------------------#
 if __name__ == '__main__':

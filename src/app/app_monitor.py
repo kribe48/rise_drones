@@ -31,7 +31,7 @@ _context = zmq.Context()
 class Monitor():
   def __init__(self, app_ip, app_id, crm, mqtt_agent):
     # Import the client lib
-    dss.client.Client.__init__(self, timeout=2, exception_handler=None, context=_context)
+    dss.client.Client.__init__(self, timeout=2000, exception_handler=None, context=_context)
 
     self.crm = dss.client.CRM(_context, crm, app_name='app_monitor.py', desc='Monitor application', app_id=app_id)
     #self._app_id = self.crm.app_id
@@ -71,7 +71,7 @@ class Monitor():
     _logger.info(f'App_monitor registered with CRM: {self.crm.app_id}')
 
     # Clients that are connected to the CRM
-    self.clients = []
+    self.clients = {}
     self._info_threads = {}
     #Store the data received from the drones
     self.drone_data = {}
@@ -79,6 +79,12 @@ class Monitor():
     self.battery_data = {}
     self.mqtt_agent = mqtt_agent
     self._mqtt_threads = {}
+    # Use pre-allocated IDs to remove ghost problem in mqtt
+    self.allocated_idxs = {}
+    self.max_drones = 100
+    self.available_idxs = []
+    for ii in range(0, self.max_drones):
+      self.available_idxs.append(ii)
 
 #--------------------------------------------------------------------#
   @property
@@ -89,7 +95,7 @@ class Monitor():
 #--------------------------------------------------------------------#
   def kill(self):
     # Clean the clients list to stop subscription threads and closing sockets.
-    self.clients = []
+    self.clients = {}
 
     # Unregister APP from CRM
     _logger.info("Unregister from CRM")
@@ -143,42 +149,40 @@ class Monitor():
     return answer
 
 #--------------------------------------------------------------------#
-  def client_in_list(self, client_id, clients_list) -> bool:
-    for client in clients_list:
-      if client['id'] == client_id:
-        return True
-    return False
+  @staticmethod
+  def client_in_dict(client_id, client_dict) -> bool:
+    return client_id in client_dict
 
   def print_clients(self):
     if len(self.clients) == 0:
-      print('\nThe current list of dss clients is empty')
+      _logger.info('\nThe current list of dss clients is empty')
     else:
-      print('\nThe current list of dss clients, [#](ID, NAME):')
+      _logger.info('\nThe current list of dss clients, [#](ID, NAME):')
       i = 1
-      for client in self.clients:
-        print(f'  [{i}] {client["id"], client["name"]}')
+      for client_id, client in self.clients.items():
+        _logger.info(f'  [{i}] {client_id, client["name"]}')
         i += 1
 
 #--------------------------------------------------------------------#
-  def setup_client(self, client):
-    self._info_threads[client['id']] = threading.Thread(target=self._subscriber_thread, args=(client,))
-    self.drone_data_locks[client['id']]= threading.Lock()
-    self._info_threads[client['id']].start()
+  def setup_client(self, client_id):
+    self._info_threads[client_id] = threading.Thread(target=self._subscriber_thread, args=(client_id,))
+    self.drone_data_locks[client_id]= threading.Lock()
+    self._info_threads[client_id].start()
 
-  def setup_mqtt_client(self, client):
-    self._mqtt_threads[client['id']] = threading.Thread(target=self._mqtt_client, args=(client,))
-    self._mqtt_threads[client['id']].start()
+  def setup_mqtt_client(self, client_id):
+    self._mqtt_threads[client_id] = threading.Thread(target=self._mqtt_client, args=(client_id,))
+    self._mqtt_threads[client_id].start()
 # MQTT-thread. Connect an agent to WARA-PS core system and report position
-  def _mqtt_client(self, client):
-    drone_id = client['id']
-    drone_name = client['drone_name']
-    drone_type = client['drone_type']
-    sim_real = client['sim_real']
+  def _mqtt_client(self, client_id):
+    drone_id = client_id
+    drone_name = self.clients[drone_id]['drone_name']
+    drone_type = self.clients[drone_id]['drone_type']
+    sim_real = self.clients[drone_id]['sim_real']
     mqtt_agent = MqttAgent(drone_name, drone_type, sim_real)
     # Wait until position has been streamed
     time.sleep(2.0)
     rate: float = 1.0 / mqtt_agent.logic.rate #1.0
-    while self.client_in_list(drone_id, self.clients):
+    while self.client_in_dict(drone_id, self.clients):
       drone_data = None
       self.drone_data_locks[drone_id].acquire()
       try:
@@ -189,11 +193,11 @@ class Monitor():
       if drone_data :
         mqtt_agent.set_lla(drone_data['lat'], drone_data['lon'], drone_data['alt'])
         mqtt_agent.set_heading(drone_data['heading'])
-        if 'velocity' in drone_data:
-          speed = math.sqrt(drone_data['velocity'][0]**2 + drone_data['velocity'][1]**2)
+        if 'vel_n' in drone_data:
+          speed = math.sqrt(drone_data['vel_n']**2 + drone_data['vel_e']**2)
           mqtt_agent.set_speed(speed)
           if speed > 0.1 :
-            course = (180/math.pi)*math.atan2(drone_data['velocity'][1], drone_data['velocity'][0])
+            course = (180/math.pi)*math.atan2(drone_data['vel_e'], drone_data['vel_n'])
             mqtt_agent.set_course(course)
       mqtt_agent.send_heartbeat()
       mqtt_agent.send_sensor_info()
@@ -206,16 +210,16 @@ class Monitor():
 
 #--------------------------------------------------------------------#
   # An subscribe thread. One per client will be launched. Thread is killed when client is removed from list
-  def _subscriber_thread(self, client):
-    ip = client['ip']
-    port = client['port']
-    drone_id = client['id']
+  def _subscriber_thread(self, client_id):
+    drone_id = client_id
+    ip = self.clients[drone_id]['ip']
+    port = self.clients[drone_id]['port']
     # print("Debug: New client ip and port: ", ip, port)
 
-    # Connect the Request socket to enable the LLA stream
-    req_socket = dss.auxiliaries.zmq.Req(_context, ip, port, label=drone_id)
+    # Connect the Request socket to enable the STATE stream
+    req_socket = dss.auxiliaries.zmq.Req(_context, ip, port, label=drone_id, timeout=2000)
     # Enable stream
-    stream = 'LLA'
+    stream = 'STATE'
     self.enable_stream(stream,req_socket)
     # Get info port from DSS
     sub_port = self.get_port(req_socket, 'info_pub_port')
@@ -225,9 +229,9 @@ class Monitor():
     sub_socket.subscribe(stream)
 
     if self.mqtt_agent:
-      self.setup_mqtt_client(client)
+      self.setup_mqtt_client(client_id)
 
-    while self.client_in_list(drone_id, self.clients):
+    while self.client_in_dict(drone_id, self.clients):
       try:
         (topic, msg) = sub_socket.recv()
         if topic == stream:
@@ -237,7 +241,7 @@ class Monitor():
         elif topic == 'battery':
           self.battery_data[drone_id] = msg
         else:
-          _logger.info(f"Topic {topic} not recognized on info link {msg}")
+          pass
       except:
         pass
     #Remove the drone from the map
@@ -300,38 +304,48 @@ class Monitor():
         # The latest list of clients from crm
         crm_clients = answer['clients']
 
-        # Figure if we already have all clients in our local list. Loop through the CRM-list -> append
-        for client in crm_clients:
-          if not self.client_in_list(client['id'], self.clients):
+        # Figure if we already have all clients in our local list. Loop through the CRM-dict -> append
+        for client_id, client in crm_clients.items():
+          if not self.client_in_dict(client_id, self.clients):
             if client['ip'] != '':
+              #Allocate an ID
+              lowest_idx = min(self.available_idxs)
+              self.allocated_idxs[client_id]= lowest_idx
+              self.available_idxs.remove(lowest_idx)
               if "[SIM]" in client['desc']:
-                client['sim_real'] = "simulated"
-                client['drone_name'] = "RISE-" + client['id']
-                client['drone_type'] = 'simulated'
+                client['sim_real'] = "simulation"
+                client['drone_name'] = "RISE-" + '{index:03d}'.format(index=self.allocated_idxs[client_id])
+                client['drone_type'] = 'air'
               elif "HX" in client['desc']:
                 client['sim_real'] = "real"
                 client['drone_name'] = "RISE-" + client['desc']
-                client['drone_type'] = 'Hexacopter'
+                client['drone_type'] = 'air'
               else:
                 client['sim_real'] = "real"
-                client['drone_name'] = "RISE-"+client['id']
-                client['drone_type'] = "DJI Mini"
-              self.clients.append(client)
-              print(f'Client {client} added to the list')
-              self.setup_client(client)
+                client['drone_name'] = "RISE-"+ '{index:03d}'.format(index=self.allocated_idxs[client_id])
+                client['drone_type'] = "air"
+              self.clients[client_id]=client
+              _logger.info(f'Client {client_id}, {client} added to the list')
+              self.setup_client(client_id)
               self.print_clients()
             else:
-              print(client['id'] + " has no ip, not adding to list..")
+              _logger.info(client_id + " has no ip, not adding to list..")
 
         # Figure if there is a client on our local list that is not in the CRM-list -> pop
-        index = 0
-        for client in self.clients:
-          if not self.client_in_list(client['id'], crm_clients):
-            # Pop client, subscription will be ended and socket closed
-            self.clients.pop(index)
-            print('Client {the_client} popped from the list'.format(the_client=client['id']))
-            self.print_clients()
-          index += 1
+        clients_to_pop = {}
+        for client_id in self.clients:
+          if not self.client_in_dict(client_id, crm_clients):
+            # Collect clients to pop outside the for loop
+            clients_to_pop[client_id] = 1
+        # Pop clients from client list, subscription will be ended and socket closed
+        for client_id in clients_to_pop:
+          self.clients.pop(client_id)
+          current_idx = self.allocated_idxs[client_id]
+          self.available_idxs.append(current_idx)
+          self.allocated_idxs.pop(client_id)
+          _logger.info('Client {the_client} popped from the list'.format(the_client=client_id))
+          self.print_clients()
+
       time.sleep(1)
       cursor_index += 1
       if cursor_index >= len(cursor):
@@ -348,6 +362,7 @@ def _main():
   parser.add_argument('--crm', type=str, help='<ip>:<port> of crm', required=True)
   parser.add_argument('--app_ip', type=str, help='ip of the app', required=True)
   parser.add_argument('--mqtt_agent', action='store_true', help='enable MQTT sensor reporting (level 1 agent) to WARA-PS core system')
+  parser.add_argument('--owner', type=str, help='id of the instance controlling app_monitor - not used in this use case')
   parser.add_argument('--log', type=str, default='debug', help='logging threshold')
   parser.add_argument('--stdout', action='store_true', help='enables logging to stdout')
   args = parser.parse_args()

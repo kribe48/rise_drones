@@ -21,6 +21,7 @@ companion_computer/dji       |version-dji|
    CRM_API
    Application_API
    TYRApp_API
+   SkarApp_API
    APP_selfie_API
 
 Indices and tables

@@ -9,7 +9,7 @@ Input parameters
 
 This application
 1. Connects to the CRM & USSP
-2. Asks for an available drone resource with correct capability
+2. Asks for an available drone resource with correct capabilities
 3. Read and parse the mission
 4. Executes the mission (potentially several routes)
 5. Finish the mission by landing at the return location

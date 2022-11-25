@@ -106,7 +106,8 @@ class Server:
                             'photo_LLA':             {'enabled': False, 'name': 'TODO'},
                             'photo_XYZ':             {'enabled': False, 'name': 'TODO'},
                             'currentWP':             {'enabled': False, 'name': 'TODO'},
-                            'battery':               {'enabled': False, 'name': 'TODO'}}
+                            'battery':               {'enabled': False, 'name': 'TODO'},
+                            'STATE':                 {'enabled': False, 'name': None}}        # Trigger LLA subscription, but not twice. Handeled in _attribute_listener
 
 
     # create the hexacopter object
@@ -130,6 +131,7 @@ class Server:
                       'get_currentWP':      {'request': self._request_get_currentWP,      'task': None}, # Not implemented
                       'get_flightmode':     {'request': self._request_get_flightmode,     'task': None},
                       'get_idle':           {'request': self._request_get_idle,           'task': None},
+                      'get_state':          {'request': self._request_get_state,          'task': None},
                       'get_info':           {'request': self._request_get_info,           'task': None},
                       'get_metadata':       {'request': self._request_get_metadata,       'task': None}, # Not implemented
                       'get_owner':          {'request': self._request_get_owner,          'task': None},
@@ -305,6 +307,17 @@ class Server:
     answer = dss.auxiliaries.zmq.ack(fcn, {'idle': not self._task_event.is_set()})
     return answer
 
+  def _request_get_state(self, msg) -> dict:
+    fcn = dss.auxiliaries.zmq.get_fcn(msg)
+    # No nack reasons, accept
+    # Build up answer
+    pos = self._hexa.get_position_lla()
+    heading_deg = self._hexa.get_heading(unit="deg")
+    (vel_n, vel_e, vel_d) = self._hexa.get_velocity(ref="NED")
+    mess = {'lat': pos.lat, 'lon': pos.lon, 'alt': pos.alt, 'heading': heading_deg, 'agl': -1, 'vel_n': vel_n, 'vel_e': vel_e, 'vel_d': vel_d, 'gnss_state': self._hexa.gnss_state, 'flight_state': self._hexa.flight_state}
+    answer = dss.auxiliaries.zmq.ack(fcn, mess)
+    return answer
+
   def _request_get_info(self, msg) -> dict:
     fcn = dss.auxiliaries.zmq.get_fcn(msg)
     # No nack reasons, accept
@@ -354,7 +367,7 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
     elif self._hexa.get_nsat() < 8:
       answer = dss.auxiliaries.zmq.nack(fcn, 'Less than 8 satellites')
-    elif self._hexa.flying_state == 'flying':
+    elif self._hexa.flight_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is flying')
     elif not 2 <= to_alt <= 40:
       answer = dss.auxiliaries.zmq.nack(fcn, 'Height is out of limits')
@@ -373,7 +386,7 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, descr)
     elif self._in_controls != 'APPLICATION':
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
-    elif not self._hexa.flying_state == 'flying':
+    elif not self._hexa.flight_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
     # Accept
     else:
@@ -388,7 +401,7 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, descr)
     elif self._in_controls != 'APPLICATION':
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
-    elif not self._hexa.flying_state == 'flying':
+    elif not self._hexa.flight_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
     elif False: # Think this nack reason is related to DJI-DSS.
       answer = dss.auxiliaries.zmq.nack(fcn, 'RTL failed to engage, try again')
@@ -407,7 +420,7 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, descr)
     elif self._in_controls != 'APPLICATION':
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
-    elif not self._hexa.flying_state == 'flying':
+    elif not self._hexa.flight_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
     elif not 0 <= hover_time <= 300:
       answer = dss.auxiliaries.zmq.nack(fcn, 'Hover_time is out of limits')
@@ -430,7 +443,7 @@ class Server:
       answer = dss.auxiliaries.zmq.nack(fcn, descr)
     elif self._in_controls != 'APPLICATION':
       answer = dss.auxiliaries.zmq.nack(fcn, 'Application is not in controls')
-    elif not self._hexa.flying_state == 'flying':
+    elif not self._hexa.flight_state == 'flying':
       answer = dss.auxiliaries.zmq.nack(fcn, 'State is not flying')
     elif self._task_event.is_set() and self._task_priority == MAX_PRIORITY:
       answer = dss.auxiliaries.zmq.nack(fcn, 'Task not prioritized')
@@ -775,11 +788,20 @@ class Server:
       # Update publish attributes dict
       self._pub_attributes[stream]['enabled'] = enable
       # Activate publish of stream
+      if stream == 'STATE':
+        # STATE requires pos attribute listener. Make sure there is one enabled.
+        if not self._pub_attributes['LLA']['enabled']:
+          msg_mod = msg
+          msg_mod['stream'] = 'LLA'
+          return self._request_data_stream(msg_mod)
       if enable:
         self._hexa.vehicle.add_attribute_listener(self._pub_attributes[stream]['name'], self._attribute_listener)
         self._logger.info("Global listener added: %s", stream)
       # Deactivate publish of stream
       else:
+        # STATE stream requires pos attribute listener.
+        if stream == 'LLA' and self._pub_attributes['STATE']['enabled']:
+          return dss.auxiliaries.zmq.nack(fcn, 'STATE stream is active')
         self._hexa.vehicle.remove_attribute_listener(self._pub_attributes[stream]['name'], self._attribute_listener)
         self._logger.info("Global listener removed: %s", stream)
     return answer
@@ -910,8 +932,16 @@ class Server:
       #print("Attitude callback sending log data:", json_msg)
     # LLA
     elif att_name == 'location.global_frame':
-      msg = {'lat': msg.lat, 'lon': msg.lon, 'alt': msg.alt, 'heading': vehicle.heading, 'velocity': vehicle.velocity, 'gnss_state': self._hexa.gnss_state, 'agl': -1 }
-      self._pub_socket.publish('LLA', msg)
+      msg_LLA = {'lat': msg.lat, 'lon': msg.lon, 'alt': msg.alt, 'heading': vehicle.heading, 'gnss_state': self._hexa.gnss_state, 'agl': -1 }
+      self._pub_socket.publish('LLA', msg_LLA)
+      if self._pub_attributes['STATE']['enabled']:
+        vel = vehicle.velocity
+        vel_n = vel[0]
+        vel_e = vel[1]
+        vel_d = vel[2]
+        msg_STATE = {'lat': msg.lat, 'lon': msg.lon, 'alt': msg.alt, 'heading': vehicle.heading, 'agl': -1, 'vel_n': vel_n, 'vel_e': vel_e, 'vel_d': vel_d, 'gnss_state': self._hexa.gnss_state, 'flight_state': self._hexa.flight_state}
+        self._pub_socket.publish('STATE', msg_STATE)
+
     # NED
     elif att_name == 'location.local_frame':
       msg = {'north': msg.north, 'east': msg.east, 'down': msg.down, 'heading': vehicle.heading, 'velocity': vehicle.velocity, 'agl': -1}
@@ -1033,7 +1063,7 @@ class Server:
     t_sleep = 1
     t_landed_threshold = 15/t_sleep # Unit seconds
     while t_landed < t_landed_threshold :
-        if self._hexa.flying_state == 'landed':
+        if self._hexa.flight_state == 'landed':
           t_landed += t_sleep
         else:
           t_landed = 0

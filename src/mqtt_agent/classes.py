@@ -30,7 +30,7 @@ class Logic:
     self.description: str = "RISE Drone"
     self.domain: str = "air"
     self.sim_real: str = sim_real # simulation or real
-    self.level: str = "sensor"
+    self.level: list = ["sensor"]
     self.rate: float = 1.0
     self.uuid: str = str(uuid.uuid4())
     self.tasks_available = [] #Only level 1 (sensor) at the moment

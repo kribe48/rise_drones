@@ -2,7 +2,7 @@
 
 from configparser import ConfigParser
 from dss.auxiliaries import (config, exception, git, heartbeat, logging,
-                             spawnDaemon, zmq)
+                             spawnDaemon, zmq, math, kalman)
 from dss.auxiliaries.getch import getch
 from dss.auxiliaries.task_queue import TaskQueue
 

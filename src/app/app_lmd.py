@@ -11,7 +11,7 @@ Input parameters
 
 This application
 1. Connects to the CRM
-2. Asks for an available drone resource with correct capability
+2. Asks for an available drone resource with correct capabilities
 3. Pick up a package at a pickup location
 4. Delivers the package at a delivery location
 5. Finish the mission by returning to a return location

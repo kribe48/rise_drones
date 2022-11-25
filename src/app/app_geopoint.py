@@ -9,7 +9,7 @@ Input parameters
 
 This application
 1. Connects to the CRM
-2. Asks for an available drone resource with correct capability
+2. Asks for an available drone resource with correct capabilities
 3. Loads the mission and pass it to the drone
 4. Executes the mission
 5. Finish the mission by returning to a return location
@@ -47,7 +47,7 @@ class AppGeo():
     self.drone = dss.client.Client(timeout=2000, exception_handler=None, context=_context)
 
     # Create CRM object
-    self.crm = dss.client.CRM(_context, crm, app_name='app_lmd.py', desc='LMD mission', app_id=app_id)
+    self.crm = dss.client.CRM(_context, crm, app_name='app_geopoint.py', desc='Geopoint mission', app_id=app_id)
 
     self._alive = True
     self._dss_data_thread = None

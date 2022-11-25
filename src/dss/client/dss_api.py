@@ -138,6 +138,19 @@ class DSS:
     # return
     return answer['idle']
 
+  def get_state(self) -> dict:
+    call = 'get_state'
+    # build message
+    msg = {'fcn': call, 'id': self._app_id}
+    # send and receive message
+    answer = self._socket.send_and_receive(msg)
+    # handle nack
+    if not dss.auxiliaries.zmq.is_ack(answer, call):
+      raise dss.auxiliaries.exception.Nack(dss.auxiliaries.zmq.get_nack_reason(answer), fcn=call)
+    # return
+    return answer
+
+
   def set_init_point(self, heading_ref) -> None:
     call = 'set_init_point'
     # build message
@@ -242,6 +255,21 @@ class DSS:
       raise dss.auxiliaries.exception.Nack(dss.auxiliaries.zmq.get_nack_reason(answer), fcn=call)
     # return
     return
+
+  def set_alt(self, alt, ref) -> None:
+    call = 'set_alt'
+    # build message
+    msg = {'fcn': call, 'id': self._app_id}
+    msg['alt'] = alt
+    msg['reference'] = ref
+    # send and receive message
+    answer = self._socket.send_and_receive(msg)
+    # handle nack
+    if not dss.auxiliaries.zmq.is_ack(answer, call):
+      raise dss.auxiliaries.exception.Nack(dss.auxiliaries.zmq.get_nack_reason(answer), fcn=call)
+    # return
+    return
+
 
   def set_default_speed(self, default_speed) -> None:
     call = 'set_default_speed'
@@ -366,6 +394,18 @@ class DSS:
     # send and receive message
     answer = self._socket.send_and_receive(msg)
     # handle nack
+    if not dss.auxiliaries.zmq.is_ack(answer, call):
+      raise dss.auxiliaries.exception.Nack(dss.auxiliaries.zmq.get_nack_reason(answer), fcn=call)
+    # return
+    return
+
+  def set_spotlight(self, enable, brightness=100):
+    call = 'set_spotlight'
+    msg = {'fcn': call, 'id': self._app_id}
+    msg['enable'] = enable
+    msg['brightness'] = brightness
+    # send and receive msg
+    answer = self._socket.send_and_receive(msg)
     if not dss.auxiliaries.zmq.is_ack(answer, call):
       raise dss.auxiliaries.exception.Nack(dss.auxiliaries.zmq.get_nack_reason(answer), fcn=call)
     # return

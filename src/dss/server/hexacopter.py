@@ -287,13 +287,13 @@ class Hexacopter:
     self._expected_flight_mode = True
     self._rtl_waypoints = list()
     self.default_speed = 5
-    self.flying_state = 'on_ground'
+    self.flight_state = 'ground'
 
     self._thread_flight_mode = threading.Thread(target=self._main_flight_mode, daemon=True)
     self._thread_flight_mode.start()
 
-    self._thread_flying_state = threading.Thread(target=self._main_flying_state, daemon=True)
-    self._thread_flying_state.start()
+    self._thread_flight_state = threading.Thread(target=self._main_flight_state, daemon=True)
+    self._thread_flight_state.start()
 
   @property
   def status_msg(self):
@@ -323,17 +323,17 @@ class Hexacopter:
     self._abort_task = value
 
   @property
-  def flying_state(self):
+  def flight_state(self):
     '''Get the flying state'''
-    return self._flying_state
+    return self._flight_state
 
-  @flying_state.setter
-  def flying_state(self, value):
+  @flight_state.setter
+  def flight_state(self, value):
     '''Get the flying state'''
-    valid_states = ['on_ground','flying','landed']
+    valid_states = ['ground','flying','landed']
     if not value in valid_states:
       raise ValueError(f'{value} is not a valid flying state({valid_states})')
-    self._flying_state = value
+    self._flight_state = value
 
   @property
   def gnss_state(self):
@@ -374,7 +374,7 @@ class Hexacopter:
 
   # Method returns armed state. We consider armed state as flying.
   def is_flying(self) -> bool:
-    self.logger.warning('Deprecated function is_flying, use property flying_state instead')
+    self.logger.warning('Deprecated function is_flying, use property flight_state instead')
     return self.vehicle.armed
 
   def is_armed(self) -> bool:
@@ -572,6 +572,21 @@ class Hexacopter:
   def get_flight_mode(self):
     return self.vehicle.mode.name
 
+  def get_body_vel(self, vel, heading):
+    #TODO Untested function
+    vel_n = vel[0]
+    vel_e = vel[1]
+    vel_d = vel[2]
+
+    alpha = heading/180*math.pi
+
+    #Rotate earth-fixed velocities to body fixed: V_b = Re->b*V_e
+    vel_body_x = vel_n*math.cos(alpha) + vel_e*math.sin(alpha)
+    vel_body_y = -vel_n*math.sin(alpha)+ vel_e*math.cos(alpha)
+    vel_body_z = vel_d
+
+    return (vel_body_x, vel_body_y, vel_body_z)
+
   def set_expected_flight_mode(self, mode):
     with self._mutex_mode:
       self.mode = mode
@@ -587,12 +602,12 @@ class Hexacopter:
 
       time.sleep(0.5)
 
-  # Monitor flying state implements state machine: on_ground -> flying <-> landed
-  def _main_flying_state(self):
-    self.flying_state = 'on_ground'
-    self.logger.info(f'Flying state: {self.flying_state}')
+  # Monitor flying state implements state machine: ground -> flying <-> landed
+  def _main_flight_state(self):
+    self.flight_state = 'ground'
+    self.logger.info(f'Flight state: {self.flight_state}')
     while True:
-      # Vehicle 'on_ground' or 'landed', wait for arming and lift off
+      # Vehicle 'ground' or 'landed', wait for arming and lift off
       while not self.vehicle.armed:
         time.sleep(0.51)
       # Vehicle armed
@@ -600,17 +615,17 @@ class Hexacopter:
 
       # While armed, test transition to flying state
       while self.vehicle.armed:
-        if self.flying_state != 'flying':
+        if self.flight_state != 'flying':
           if self.get_position_lla_global().alt - start_alt > 1.0:
             # Up and flying, update state
-            self.flying_state = 'flying'
-            self.logger.info(f'Flying state: {self.flying_state}')
+            self.flight_state = 'flying'
+            self.logger.info(f'Flight state: {self.flight_state}')
         time.sleep(0.51)
 
       # Vehicle is not armed anymore
-      if self.flying_state == 'flying':
-        self.flying_state = 'landed'
-        self.logger.info(f'Flying state: {self.flying_state}')
+      if self.flight_state == 'flying':
+        self.flight_state = 'landed'
+        self.logger.info(f'Flight state: {self.flight_state}')
 
   def set_flight_mode_and_wait(self, mode, timeout=0.5):
     with self._mutex_mode:
@@ -796,6 +811,27 @@ class Hexacopter:
   # Lat long and alt AMSL
   def get_position_lla_global(self):
     return self.vehicle.location.global_frame
+
+  # Return vehicle heading in unit ("deg" or "rad")
+  def get_heading(self, unit):
+    if unit == "deg":
+      return self.vehicle.attitude.yaw/math.pi*180
+    elif unit == "rad":
+      return self.vehicle.attitude.yaw
+    else:
+      return None
+
+  def get_velocity(self, ref):
+    # Vel is in NED.
+    vel = self.vehicle.velocity
+    # Respond in
+    if ref == "NED":
+      vel_n = vel[0]
+      vel_e = vel[1]
+      vel_d = vel[2]
+      return (vel_n, vel_e, vel_d)
+    else:
+      return (None, None, None)
 
   # Print current pos NED
   def print_pos_ned(self):

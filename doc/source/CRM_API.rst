@@ -143,7 +143,17 @@ client.
 All clients must provide a list of ``capabilities``. However, note that
 this list is allowed to be empty. Each capability is represented as a string.
 The lists of capabilities are used by the CRM to allocate available resources when
-applications require a drone with certain capabilities to perform a task.
+applications require a drone with certain capabilities to perform a task. The following capabilities are supported:
+
+* SIM - Drone is simulated
+* REAL - Drone is not simulated
+* C0 - Drone is C0 compatible, below 250g. Note second char is a zero - Charlie Zero.
+* RTK - RTK compatible
+* RGB - RGB camera compatible
+* IR - IR camera compatible
+* LMD - Drone can do last mile delivery, can carry and drop load.
+* STREAM - Drone can stream video
+* SPOTLIGHT - Drone has a spotlight
 
 If the CRM responds with an ack and the registering client is DSS it
 shall set it's owner to 'crm'.
@@ -163,7 +173,7 @@ shall set it's owner to 'crm'.
     "id": "",
     "name": "DSS HX003",
     "desc": "<description>",
-    "capabilities": ["RTK", "LMD"],
+    "capabilities": ["C0", "REAL"],
     "type": "dss",
     "ip": "<ip>",
     "port": 1234
@@ -419,11 +429,11 @@ Fcn: clients
 .. compatibility:: badge
   :crm: -
 
-The function clients requests a list of all connected clients. The key
+The function clients requests a JSON with of all connected clients. The key
 "filter" can be used to filer only the matching client id's of
 interest, for example "dss" to get all connected dss's, "dss001" to
-get a specific dss or an empty string "" to get all clients.  Return
-value is always a list. The list can be empty.
+get a specific dss or an empty string "" to get all clients.  In the return
+value there is a JSON struct with id's a keys holding JSON structs with all info.
 
 .. code-block:: json
   :caption: Function call: **clients**
@@ -435,8 +445,7 @@ value is always a list. The list can be empty.
     "filter": "<client id filter>"
   }
 
-The CRM replies with an ack and a list with connected clients and
-their current owners.
+The CRM replies with an ack and the client information that that matches the search patternand.
 
 .. code-block:: json
   :caption: Reply: **clients**
@@ -445,11 +454,11 @@ their current owners.
   {
     "fcn": "ack",
     "call": "clients",
-    "clients": [
-      {"name": "hx-003", "desc": "Drone, green", "type": "dss", "owner": "da001", "ip": "<ip>", "port": 5789, "id": "dss001"},
-      {"name": "hx-004", "desc": "Drone, blue", "type": "dss", "owner": "crm", "ip": "<ip>", "port": 5789, "id": "dss002"},
-      {"name": "AppKeyboard", "desc": "test application for debugging", "type": "da", "owner": "crm", "ip": "<ip>", "port": 5789, "id": "dsa001"}
-    ]
+    "clients": {
+      "dss001": {"name": "hx-003", "desc": "Drone, green", "type": "dss", "owner": "da001", "ip": "<ip>", "port": 5789},
+      "dss002": {"name": "hx-004", "desc": "Drone, blue", "type": "dss", "owner": "crm", "ip": "<ip>", "port": 5789},
+      "da020": {"name": "AppKeyboard", "desc": "test application for debugging", "type": "da", "owner": "crm", "ip": "<ip>", "port": 5789}
+      }
   }
 
 **Nack reasons:**
@@ -512,7 +521,7 @@ CLIENTS - Client list updated
   :crm: -
 
 As soon as there are changes to the clients list of the CRM it will
-publish the list under topic "clients". The message is equal to the
+publish the updated client list under topic "clients". The message is equal to the
 response of the clients command, :ref:`fcnclients`.
 
 .. code-block:: json
@@ -520,11 +529,9 @@ response of the clients command, :ref:`fcnclients`.
   :linenos:
 
   {
-    "clients": [
-      {"name": "hx-003", "desc": "Drone, green", "type": "dss", "owner": "da001", "ip": "<ip>", "port": 5789, "id": "dss001"},
-      {"name": "hx-004", "desc": "Drone, blue", "type": "dss", "owner": "crm", "ip": "<ip>", "port": 5789, "id": "dss002"},
-      {"name": "AppKeyboard", "desc": "test application for debugging", "type": "da", "owner": "crm", "ip": "<ip>", "port": 5789, "id": "dsa001"}
-    ]
+    "dss001": {"name": "hx-003", "desc": "Drone, green", "type": "dss", "owner": "da001", "ip": "<ip>", "port": 5789},
+    "dss002": {"name": "hx-004", "desc": "Drone, blue", "type": "dss", "owner": "crm", "ip": "<ip>", "port": 5789},
+    "da20": {"name": "AppKeyboard", "desc": "test application for debugging", "type": "da", "owner": "crm", "ip": "<ip>", "port": 5789}
   }
 
 

@@ -9,7 +9,7 @@ Input parameters
 
 This application
 1. Connects to the CRM
-2. Asks for an available drone resource with correct capability
+2. Asks for an available drone resource with correct capabilities
 3. Loads the mission and pass it to the drone
 4. Executes the mission
 5. Finish the mission by returning to a return location

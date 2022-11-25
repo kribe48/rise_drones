@@ -22,7 +22,7 @@ def _main():
   args = parser.parse_args()
 
   context = zmq.Context()
-  socket = dss.auxiliaries.zmq.Sub(context, ip=args.ip, port=args.port)
+  socket = dss.auxiliaries.zmq.Sub(context, ip=args.ip, port=args.port, timeout=30000)
 
   while socket:
     try:

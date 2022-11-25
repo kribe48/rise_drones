@@ -439,7 +439,7 @@ class TYRApp:
   def task_low_battery(self):
     if self._drone1.connected():
       if self._drone1._battery_low and not self._drone2.connected():
-        answer = self._crm_socket.send_and_receive({'fcn': 'get_drone', 'id': self._app_id, 'capability': self.capability})
+        answer = self._crm_socket.send_and_receive({'fcn': 'get_drone', 'id': self._app_id, 'capabilities': self.capabilities})
         if dss.auxiliaries.zmq.is_ack(answer):
           self._task_queue.add(self.task_getDrone, answer['id'], answer['ip'], answer['port'])
         else:
@@ -475,6 +475,7 @@ class TYRApp:
 #----                                                            ----#
   # Update tyramote ip and ports
   def get_and_save_tyramote_info(self):
+    # Update to use crm lib TODO
     call = 'clients'
     msg = {'fcn': call, 'id': self._app_id, 'filter': self._tyramote_id}
     answer = self._crm_socket.send_and_receive(msg)
@@ -482,11 +483,13 @@ class TYRApp:
       _logger.error(f'clients failed')
       self.kill()
       return
-    client = answer['clients'][0]
-    if client['id'] != self._tyramote_id:
+    if not self._tyramote_id in answer['clients']:
       _logger.error(f'owner not found')
       self.kill()
       return
+
+    client = answer['clients'][self._tyramote_id]
+
 
     # Update ip and port info, then connect to TYRAmote
     self._tyramote_ip = client['ip']
@@ -538,6 +541,7 @@ class TYRApp:
     msg['id'] = self._app_id
     msg['ip'] = self._app_ip
     msg['port'] = self._app_socket.port
+    msg['capabilities'] = []
     answer = self._crm_socket.send_and_receive(msg)
     if not dss.auxiliaries.zmq.is_ack(answer, call):
       _logger.error(f'register failed: {answer}')
@@ -601,15 +605,15 @@ class TYRApp:
     fcn = dss.auxiliaries.zmq.get_fcn(msg)
 
     # check arguments
-    if not all(key in msg for key in ['id', 'enable', 'capability']):
-      return dss.auxiliaries.zmq.nack(fcn, 'bad arguments: {id, enable, capability} are mandatory')
+    if not all(key in msg for key in ['id', 'enable', 'capabilities']):
+      return dss.auxiliaries.zmq.nack(fcn, 'bad arguments: {id, enable, capabilities} are mandatory')
 
     if msg['enable']:
       if self._drone1.connected():
         return dss.auxiliaries.zmq.nack(fcn, f'already connected to {self._drone1.name}')
 
-      self.capability = msg['capability']
-      answer = self._crm_socket.send_and_receive({'fcn': 'get_drone', 'id': self._app_id, 'capability': self.capability})
+      self.capabilities = msg['capabilities']
+      answer = self._crm_socket.send_and_receive({'fcn': 'get_drone', 'id': self._app_id, 'capabilities': self.capabilities})
       if not dss.auxiliaries.zmq.is_ack(answer):
         desc = answer['description'] if 'description' in answer else 'no description'
         _logger.error(f'get_drone failed: {desc}')

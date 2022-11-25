@@ -473,9 +473,9 @@ Fcn: ``get_idle``
   :dji: verified
   :py-client: verified
 
-The function ``get_idle``
-
-.. todo:: LA: Whats does it do? (mine returns true..)
+The function ``get_idle`` reports false if task is running, i.e. take-off, fly
+waypoints or landing for example, otherwise true. Can be used for awaiting
+take-off to complete for example
 
 .. code-block:: json
   :caption: Function call: ``get_idle``
@@ -493,6 +493,58 @@ The function ``get_idle``
   {
     "fcn": "ack",
     "idle": true
+  }
+
+**Nack reasons:**
+  - None
+
+
+.. _fcngetstate:
+
+Fcn: ``get_state``
+~~~~~~~~~~~~~~~~~~
+.. compatibility:: badge
+  :ardupilot: -
+  :dji: verified
+  :py-client: verified
+
+The function get state acquires one instance of the STATE-message that also can
+be subscribed to as a data-stream.
+
+Lat, long [Decimal degrees]; Alt [m AMSL]; Heading [degrees relative true
+north]; Agl [m] above ground, -1 if not valid; . vel_n, vel_e, vel_d [m/s] in
+NED frame and gnss_state [0-6] with mapping described below, key 'flight_state'
+reports a state machine that is initiated 'ground', after take off flight_state
+will and then toggle between 'flying' and 'landed' (ground -> flying <-> landed)
+
+
+.. code-block:: json
+  :caption: Function call: ``get_state``
+  :linenos:
+
+  {
+    "fcn": "get_state",
+    "id": "<requestor id>"
+  }
+
+
+.. code-block:: json
+  :caption: Function call: ``get_state``
+  :linenos:
+
+
+  {
+    "fcn": "ack",
+    "lat": -0.0018926148768514395,
+    "long": 0.0014366497052833438,
+    "alt": 28.3,
+    "heading": 359,
+    "agl": -1,
+    "vel_n": 2.2,
+    "vel_e": 0,
+    "vel_d": -1.1,
+    "gnss_state": 3,
+    "flight_state": "landed"
   }
 
 **Nack reasons:**
@@ -766,6 +818,38 @@ heading.
   - Application is not in controls
   - Not flying
   - Heading is out of limits
+  - Mission is active
+
+Fcn: ``set_alt``
+~~~~~~~~~~~~~~~~
+
+.. compatibility:: badge
+  :ardupilot: -
+  :dji: verified
+  :py-client: verified
+
+The function ``set_alt`` sets the application desired altitude specified as a
+double in the key ``alt`` [m] with ``reference`` "init" or "AMSL". Altitude must
+be at least 2m higher than take-off location. This action is implemented by
+sending a waypoint to the autopilot at the current location with the specified
+altitude.
+
+.. code-block:: json
+  :caption: Function call: ``set_alt``
+  :linenos:
+
+  {
+    "fcn": "set_alt",
+    "id": "<requestor id>",
+    "alt": 30,
+    "reference": "init"
+  }
+
+**Nack reasons:**
+  - Requester is not the DSS owner
+  - Application is not in controls
+  - Not flying
+  - Alt is out of limits
   - Mission is active
 
 .. _fcnsetdefaultspeed:
@@ -1170,6 +1254,7 @@ seconds DSS will stop an hover.
   - Application is not in controls
   - Not flying
   - Pattern not set
+  - Stream already enabled
 
 .. _fcnsetgimbal:
 
@@ -1237,6 +1322,75 @@ via PWM set CAN_ID to 0.
   - Requester is not the DSS owner
   - Application is not in controls
   - Other action in execution
+
+.. _fcnsetspotlight:
+
+Fcn: ``set_spotlight``
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. compatibility:: badge
+  :ardupilot: -
+
+The function ``set_spotlight`` controls the spotlight payload. The key
+``enable`` indicates if the spotlight shall be enabled or not, the key
+``brightness`` sets the brightness of the spotlight, valid range is [1 100],
+although the brightness will be limited to 50 when on ground, function will
+return ack in this case.
+
+.. code-block:: json
+  :caption: Function call: ``set_spotlight``
+  :linenos:
+
+  {
+    "fcn": "set_spotlight",
+    "id": "<requestor id>",
+    "enable": true,
+    "brightness": 100
+  }
+
+**Nack reasons:**
+  - Requester is not the DSS owner
+  - Application is not in controls
+  - Spotlight not available
+
+.. _fcngetspotlight:
+
+Fcn: ``get_spotlight``
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. compatibility:: badge
+  :ardupilot: -
+
+The function ``get_spotlight`` gets the spotlight payload status. If the
+spotligt acessory is available the DSS answers with ack and spotlight status
+keys ``enable`` and ``brightness``. If the spotlight accessory is not available,
+the DSS will answer with a nack.
+
+
+.. code-block:: json
+  :caption: Function call: ``get_spotlight``
+  :linenos:
+
+  {
+    "fcn": "get_spotlight",
+    "id": "<requestor id>"
+  }
+
+
+.. code-block:: json
+  :caption: Reply: ``get_spotlight``
+  :linenos:
+
+  {
+    "fcn": "ack",
+    "call": "get_spotlight",
+    "enable": true,
+    "brightness": 100
+  }
+
+
+**Nack reasons:**
+  - Spotlight is not available
 
 .. _fcnphoto:
 
@@ -1765,6 +1919,60 @@ Streams of information can be controlled using the function
 :ref:`fcndatastream`. The information is published on the Info-socket
 together with the corresponding attribute as topic. The format for
 each attribute is described in the following sections.
+
+.. _STATE:
+
+STATE - State data
+~~~~~~~~~~~~~~~~~~~
+
+.. compatibility:: badge
+  :ardupilot: -
+  :dji: -
+
+The state data is published with topic "STATE". The message contains a
+combination of other streams and most often covers the need of information.
+Although, avoid using this message if not nessesary since it will add load to
+the network. example.
+
+Lat, long [Decimal degrees]; Alt [m AMSL]; Heading [degrees relative true
+north]; Agl [m] above ground, -1 if not valid; . vel_n, vel_e, vel_d [m/s] in
+NED frame and gnss_state [0-6] with mapping described below, key 'flight_state'
+reports a state machine that is initiated 'ground' and then toggles between
+'flying' and 'landed'.
+
+
+.. code-block:: json
+  :caption: GNSS_STATE look up table
+  :linenos:
+
+  {
+    ["NO_GPS",
+    "NO_FIX",
+    "GPS_OK_FIX_2D",
+    "GPS_OK_FIX_3D",
+    "GPS_OK_FIX_3D_DGPS",
+    "GPS_OK_FIX_3D_RTK_FLOAT",
+    "GPS_OK_FIX_3D_RTK_FIXED"]
+  }
+
+
+
+.. code-block:: json
+  :caption: Info-socket: Topic ``STATE``
+  :linenos:
+
+  {
+    "lat": -0.0018926148768514395,
+    "long": 0.0014366497052833438,
+    "alt": 28.3,
+    "heading": 359,
+    "agl": -1,
+    "vel_n": 2.2,
+    "vel_e": 0,
+    "vel_d": -1.1,
+    "gnss_state": 3,
+    "flight_state": "landed"
+  }
 
 .. _ATT:
 

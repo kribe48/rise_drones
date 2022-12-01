@@ -6,24 +6,15 @@ import threading
 import time
 import traceback
 import typing
-import sys
-import datetime
-import os
 
 import zmq
 
 import dss.auxiliaries
 from dss.auxiliaries.config import config
+from dss.auxiliaries.modem import Modem
 import dss.client
 
-# Requires a modem class
-try:
-  sys.path.append('/home/pi/rise_drones_dev/modem')
-  from modem import Modem
-except ImportError:
-  print('No module modem found. RISE proprietary code')
-
-__author__ = 'Lennart Ochel <lennart.ochel@ri.se>, Andreas Gising <andreas.gising@ri.se>, Kristoffer Bergman <kristoffer.bergman@ri.se>, Hanna Müller <hanna.muller@ri.se>, Joel Nordahl'
+__author__ = 'Lennart Ochel <>, Andreas Gising <andreas.gising@ri.se>, Kristoffer Bergman <kristoffer.bergman@ri.se>, Hanna Müller <hanna.muller@ri.se>, Joel Nordahl'
 __version__ = '1.1.0'
 __copyright__ = 'Copyright (c) 2019-2022, RISE'
 __status__ = 'development'

@@ -439,41 +439,41 @@ class AppSkara():
       #what happens if stream enable false during await controls?
 
   def disable_followstream(self):
-        #Start by disable follow stream
-        for drone in self.drones.values():
-          try:
-            drone.disable_follow_stream()
-          except dss.auxiliaries.exception.Nack:
-            _logger.warning("Not able to disable follow stream..")
-        self._her_lla_subscriber = None
-        # Land the drones after stream disabled.
-        #Wait for disable follow stream to finish
-        time.sleep(2.0)
-        for drone in self.drones.values():
-          try:
-            drone.dss_srtl()
-          except dss.auxiliaries.exception.Nack:
-            _logger.warning("Not able to perform dss srtl...")
+    #Start by disable follow stream
+    for drone in self.drones.values():
+      try:
+        drone.disable_follow_stream()
+      except dss.auxiliaries.exception.Nack:
+        _logger.warning("Not able to disable follow stream..")
+    self._her_lla_subscriber = None
+    # Land the drones after stream disabled.
+    #Wait for disable follow stream to finish
+    time.sleep(2.0)
+    for drone in self.drones.values():
+      try:
+        drone.dss_srtl()
+      except dss.auxiliaries.exception.Nack:
+        _logger.warning("Not able to perform dss srtl...")
 
   def allocate_drones(self, capabilities):
     # Acquire the drones.items drones.
     for role, drone in self.drones.items():
-          #Obtain a drone with correct capabilities
-          drone_received = False
-          while not drone_received:
-            self.check_if_cancelled('drone allocation')
-            answer = self.crm.get_drone(capabilities=capabilities)
-            if not dss.auxiliaries.zmq.is_ack(answer):
-              _logger.warning('No drone with correct capabilities available.. Sleeping for 2 seconds')
-              time.sleep(2.0)
-            else:
-              drone_received = True
-          _logger.info(f"Received drone for role: {role}")
-          drone.connect(answer['ip'], answer['port'], app_id=self.app_id)
-          if role == "Above":
-            info_port = drone.get_port('info_pub_port')
-            drone.enable_data_stream('LLA')
-            self._above_drone_lla_subscriber = dss.auxiliaries.zmq.Sub(_context, answer['ip'], info_port, "info above")
+      #Obtain a drone with correct capabilities
+      drone_received = False
+      while not drone_received:
+        self.check_if_cancelled('drone allocation')
+        answer = self.crm.get_drone(capabilities=capabilities)
+        if not dss.auxiliaries.zmq.is_ack(answer):
+          _logger.warning('No drone with correct capabilities available.. Sleeping for 2 seconds')
+          time.sleep(2.0)
+        else:
+          drone_received = True
+      _logger.info(f"Received drone for role: {role}")
+      drone.connect(answer['ip'], answer['port'], app_id=self.app_id)
+      if role == "Above":
+        info_port = drone.get_port('info_pub_port')
+        drone.enable_data_stream('LLA')
+        self._above_drone_lla_subscriber = dss.auxiliaries.zmq.Sub(_context, answer['ip'], info_port, "info above")
 
   def release_drones(self):
     #Disconnect the drones
@@ -552,14 +552,14 @@ class AppSkara():
   #--------------------------------------------------------------------#
   def main(self):
     self._main_task_thread.start()
-    cursor = ['  |o....|','  |.o...|', '  |..o..|', '  |...o.|','  |....o|', '  |...o.|', '  |..o..|', '  |.o...|']
+    cursor = ['  |o....|', '  |.o...|', '  |..o..|', '  |...o.|', '  |....o|', '  |...o.|', '  |..o..|', '  |.o...|']
     cursor_index = 7
     while self.alive:
       time.sleep(1)
       cursor_index += 1
       if cursor_index >= len(cursor):
         cursor_index = 0
-      print(cursor[cursor_index], end = '\r', flush=True)
+      print(cursor[cursor_index], end='\r', flush=True)
 
 ## The Point class that tracks the cyclist and triggers when cyclist switches direction
 ## The class instance is fed with new measurements of distance to home.
@@ -590,13 +590,19 @@ class Point():
     _logger.info(f'filtered speed {self.filt_speed_home}, distance home: {dist_home}')
 
   def switched_direction(self, dist_home):
-    #Have we reached the end of the road? Switch state before cyclist is actually returning
+    #Should we switch cyclist state or not?
     switched = False
     if self.state == 'Leaving' and self.road_length-dist_home < 3.0:
       self.state = "Returning"
       self.filt_speed_home = 0.0
       switched = True
       _logger.info('End of road reached, cyclist is now Returning')
+    # Should we switch to leaving again when approaching home?
+    elif self.state == 'Returning' and dist_home < 40.0:
+      self.state = "Leaving"
+      self.filt_speed_home = 0.0
+      switched = True
+      _logger.info('Start point reached, cyclist now in Leaving again')
     elif self.filt_speed_home < -self.trigger_speed:
       if self.state == "Returning" and self.road_length-dist_home > 3.0:
         # Cyclist has switched
@@ -606,7 +612,8 @@ class Point():
     # If cyclist is returning
     elif self.filt_speed_home > self.trigger_speed:
       # Cyclist is returning
-      if self.state == "Leaving":
+      # Switch to returning only when sufficiently far from home
+      if self.state == "Leaving" and dist_home > 40.0:
         # Cyclist has switched
         self.state = "Returning"
         switched = True

@@ -6,8 +6,10 @@ import json
 import logging
 import subprocess
 import traceback
-
+import psutil
 import zmq
+import re
+import os
 
 import dss.auxiliaries
 from dss.auxiliaries.config import config
@@ -20,6 +22,10 @@ __copyright__ = 'Copyright (c) 2021-2022, RISE'
 __status__ = 'development'
 
 #--------------------------------------------------------------------#
+#Initialise regular expressions for all projects in config file. Used for controlling different processes!
+for project in config["zeroMQ"]["subnets"]:
+  config["zeroMQ"]["subnets"][project]["regexp"] = re.compile(f'^.*[:=]{config["zeroMQ"]["subnets"][project]["subnet"]}[0-9][0-9].*$')
+
 
 class CRM:
   def __init__(self, ip: str, port: int, virgin=True):
@@ -31,8 +37,11 @@ class CRM:
                       'clients':             self._request_clients,
                       'delStaleClients':     self._request_delStaleClients,
                       'get_drone':           self._request_get_drone,
+                      'get_processes':       self._request_get_processes,
                       'get_info':            self._request_get_info,
+                      'get_performance':     self._request_get_performance,
                       'heart_beat':          self._request_heart_beat,
+                      'kill_process':        self._request_kill_process,
                       'launch_app':          self._request_launch_app,
                       'launch_drone_helper': self._request_launch_drone_helper,
                       'launch_dss':          self._request_launch_dss,
@@ -317,6 +326,81 @@ class CRM:
       return dss.auxiliaries.zmq.nack(fcn, 'unknown client id')
 
     return dss.auxiliaries.zmq.ack(fcn, {'info_pub_port': self._pub_socket.port, 'data_pub_port': None, 'version': __version__, 'git_version': self._git_version, 'git_branch': self._git_branch})
+
+  def _request_get_processes(self, msg: dict) -> dict:
+    fcn = dss.auxiliaries.zmq.get_fcn(msg)
+
+    # check arguments
+    if not all(key in msg for key in ['id', 'project']):
+      return dss.auxiliaries.zmq.nack(fcn, 'bad arguments: {id, project} is mandatory')
+
+    requester = msg['id']
+    project = msg["project"]
+    if requester not in self._clients and requester != 'root':
+      return dss.auxiliaries.zmq.nack(fcn, 'unknown client id')
+
+    #List all processes
+    processes = list()
+    for proc in psutil.process_iter():
+      try:
+        if 'python' not in proc.name().lower() and 'arducopter' not in proc.name() and 'mavproxy' not in proc.name():
+          continue
+
+        # get process detail as dictionary
+        info = proc.as_dict(attrs=['pid', 'name', 'cpu_percent', 'memory_percent', 'create_time', 'cmdline'])
+        info['cmd'] = ' '.join(info['cmdline'])
+
+        if not info['cmd']:
+          continue
+
+        info['project'] = 'unknown'
+        for project in config["zeroMQ"]["subnets"][project]:
+          if config["zeroMQ"]["subnets"][project]["regexp"].match(info['cmd']):
+            info['project'] = project
+            break
+        info['killable'] = 'crm.py' not in info['cmd'] and project == info['project']
+        info['memory_percent'] = str(round(info['memory_percent'], 1))
+        info['created'] = datetime.datetime.fromtimestamp(info['create_time']).strftime('%Y-%m-%d %H:%M:%S')
+
+        processes.append(info)
+      except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        pass
+      msg = dss.auxiliaries.zmq.ack(fcn)
+      msg['processes'] = processes
+      return msg
+
+  def _request_get_performance(self, msg):
+    fcn = dss.auxiliaries.zmq.get_fcn(msg)
+    # check arguments
+    if not all(key in msg for key in ['id']):
+      return dss.auxiliaries.zmq.nack(fcn, 'bad arguments: {id} is mandatory')
+
+    now = datetime.datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    cpu = str(psutil.cpu_percent(interval=0.1)).zfill(5)
+    mem = str(psutil.virtual_memory().percent).zfill(5)
+    load = [str(round(x*100)).zfill(3) + '%' for x in os.getloadavg()]
+    load = '(' + ', '.join(load) + ')'
+    msg = dss.auxiliaries.zmq.ack(fcn)
+    msg['performance'] = f'{cpu}% @ {psutil.cpu_freq().current}MHz x {psutil.cpu_count(logical=True)} {load} - {mem}% of {psutil.virtual_memory().total // 2**20}MB - time {current_time}'
+    return msg
+
+  def _request_kill_process(self, msg: dict) -> dict:
+    fcn = dss.auxiliaries.zmq.get_fcn(msg)
+    # check arguments
+    if not all(key in msg for key in ['id', 'pid']):
+      return dss.auxiliaries.zmq.nack(fcn, 'bad arguments: {id, pid} is mandatory')
+    pid = msg["pid"]
+    try:
+      p = psutil.Process(int(pid))
+      p.terminate()
+      msg = dss.auxiliaries.zmq.ack(fcn)
+    except (psutil.NoSuchProcess):
+      msg = dss.auxiliaries.zmq.nack(fcn, f'process (pid {pid}) no longer exists')
+    except:
+      msg = dss.auxiliaries.zmq.nack(fcn, str(traceback.format_exc()))
+    return msg
+
 
 
   def _request_heart_beat(self, msg: dict) -> dict:

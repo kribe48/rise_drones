@@ -22,9 +22,6 @@ __copyright__ = 'Copyright (c) 2021-2022, RISE'
 __status__ = 'development'
 
 #--------------------------------------------------------------------#
-#Initialise regular expressions for all projects in config file. Used for controlling different processes!
-for project in config["zeroMQ"]["subnets"]:
-  config["zeroMQ"]["subnets"][project]["regexp"] = re.compile(f'^.*[:=]{config["zeroMQ"]["subnets"][project]["subnet"]}[0-9][0-9].*$')
 
 
 class CRM:
@@ -345,17 +342,15 @@ class CRM:
       try:
         if 'python' not in proc.name().lower() and 'arducopter' not in proc.name() and 'mavproxy' not in proc.name():
           continue
-
         # get process detail as dictionary
         info = proc.as_dict(attrs=['pid', 'name', 'cpu_percent', 'memory_percent', 'create_time', 'cmdline'])
         info['cmd'] = ' '.join(info['cmdline'])
-
         if not info['cmd']:
           continue
-
         info['project'] = 'unknown'
-        for project in config["zeroMQ"]["subnets"][project]:
-          if config["zeroMQ"]["subnets"][project]["regexp"].match(info['cmd']):
+        for project in config["zeroMQ"]["subnets"]:
+          regexp = re.compile(f'^.*[:=]{config["zeroMQ"]["subnets"][project]["subnet"]}[0-9][0-9].*$')
+          if regexp.match(info['cmd']):
             info['project'] = project
             break
         info['killable'] = 'crm.py' not in info['cmd'] and project == info['project']
@@ -365,9 +360,9 @@ class CRM:
         processes.append(info)
       except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         pass
-      msg = dss.auxiliaries.zmq.ack(fcn)
-      msg['processes'] = processes
-      return msg
+    msg = dss.auxiliaries.zmq.ack(fcn)
+    msg['processes'] = processes
+    return msg
 
   def _request_get_performance(self, msg):
     fcn = dss.auxiliaries.zmq.get_fcn(msg)

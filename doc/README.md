@@ -1,23 +1,5 @@
-# RISE.Drone_Platform
-
-## Companion Computer
-
-The companion computers are linked as submodule. In order to enable a
-submodule, it must be initialized:
-
-> git submodule init
-
-In order to actually download the companion computers, the submodules
-must be updated:
-
-> git submodule update
-
-From now on, the root repository points to a hash of the submodules
-and the submodule directories are complete git repository of their
-respective companion computer.
-
 ## Documentation
-
+To generate the documentation, we use make-commands. They need to be executed at the root-level of the repository!
 The **html** version is generated with the following command:
 
 > make -C doc/ html
@@ -30,7 +12,7 @@ The **pdf** version is generated with the following command:
 * Sphinx
   > https://www.sphinx-doc.org/en/master/usage/installation.html
 * sphinxcontrib-mermaid
-  > pip3 install sphinxcontrib-mermaid 
+  > pip3 install sphinxcontrib-mermaid
 * mermaid-cli
   > npm config set prefix ~/.npm \
   > npm install -g @mermaid-js/mermaid-cli \
@@ -42,7 +24,7 @@ The **pdf** version is generated with the following command:
   > pip3 install sphinxcontrib-seqdiag
 * GitPython
   > pip3 install GitPython
-  
+
 ### OSX
 Install support for pdflatex: \
 	- $> brew install basictex # MUCH smaller than full install of mactex \

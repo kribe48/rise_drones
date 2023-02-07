@@ -385,6 +385,8 @@ class CRM:
     # check arguments
     if not all(key in msg for key in ['id', 'pid']):
       return dss.auxiliaries.zmq.nack(fcn, 'bad arguments: {id, pid} is mandatory')
+    if msg['id'] != 'root':
+      return dss.auxiliaries.zmq.nack(fcn, 'prohibited')
     pid = msg["pid"]
     try:
       p = psutil.Process(int(pid))

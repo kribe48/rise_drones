@@ -311,13 +311,111 @@ The CRM replies with id and endpoint information:
   - forced id is stale
   - No available drone with requested capabilities
 
+.. _fcncrmgetperformance:
+
+Fcn: get_performance
+~~~~~~~~~~~~~~
+
+.. compatibility:: badge
+  :crm: implemented
+
+The function get_performance requests the CRM to reply with information about the performance of the computer where the CRM is running,
+including CPU, memory and load.
+
+.. code-block:: json
+  :caption: Function call: **get_performance**
+  :linenos:
+
+  {
+    "fcn": "get_performance",
+    "id": "<requestor id>"
+  }
+The CRM replies with an ack and a string which captures the performance information:
+
+.. code-block:: json
+  :caption: Reply: **get_performance**
+  :linenos:
+
+  {
+    "fcn": "ack",
+    "call": "get_performance",
+    "performance": "000.0% @ 1701.6182499999998MHz x 24 (000%, 000%, 000%) - 005.6% of 20048MB - time 07:40:19"
+  }
+.. _fcncrmgetprocesses:
+Fcn: get_processes
+~~~~~~~~~~~~~~~~~~
+
+.. compatibility:: badge
+  :crm: implemented
+
+The function get_processes is designed to be used by a front-end application, in order to
+present the active processes on the computer where the CRM is running. Each process will be tagged
+with a 'killable' flag, and only the processes associated with the project in the request will be
+'killable'.
+
+.. code-block:: json
+  :caption: Function call: **get_processes**
+  :linenos:
+
+  {
+    "fcn": "get_processes",
+    "id": "<requestor id>",
+    "project": "<project name>"
+  }
+
+The CRM replies with an ack and a list of all the processes in JSON-format
+
+.. code-block:: json
+  :caption: Reply: **get_processes**
+  :linenos:
+
+  {
+    "fcn": "ack",
+    "call": "get_processes",
+    "processes": "[<info_object_1>, <info_object_2>]"
+  }
+
+where each info object contains the following information:
+
+.. code-block:: json
+  :caption: Info object from a get_processes call
+  :linenos:
+
+  {
+    "project": "<project id>",
+    "cmd": "python3 ./crm.py --ip 10.44.160.10 --port 16300",
+    "memory_percent": "1.1",
+    "cpu_percent": "0.1",
+    "killable": true,
+    "created": "2023-01-03 10:26:54",
+    "pid": 34253,
+    "name": "process name"
+  }
+
+.. _fcncrmkillprocess:
+
+Fcn: kill_process
+~~~~~~~~~~~~~~~~~~
+This function request the CRM to kill a specific process. Use with caution! It is intended to be used by the front-end,
+which only presents the 'killable' processes to the user. This function is only acked when the requester is a root application.
+
+.. code-block:: json
+  :caption: Function call: **kill_process**
+  :linenos: implemented
+
+  {
+    "fcn": "kill_process",
+    "id": "<requestor id>",
+    "pid": "<process id>"
+  }
+
 .. _fcncrmreleasedrone:
 
 Fcn: release_drone
 ~~~~~~~~~~~~~~~~~~
 
 .. compatibility:: badge
-  :crm: -
+  :crm: implemented
 
 The function release_drone can be called when as soon as a dss "is
 parked". CRM will take back the ownership and the drone application
@@ -380,7 +478,7 @@ Fcn: launch_app
 ~~~~~~~~~~~~~~~
 
 .. compatibility:: badge
-  :crm: -
+  :crm: implemented
 
 The function launch_app requests CRM to launch the app specified by
 the key "app". The argument is the filename complete filename of the
@@ -410,7 +508,7 @@ arguments.
 The CRM replies with an ack and the id of the app just launched.
 
 .. code-block:: json
-  :caption: Reply: **launch_drone_helper**
+  :caption: Reply: **launch_app**
   :linenos:
 
   {
@@ -427,9 +525,9 @@ Fcn: clients
 ~~~~~~~~~~~~
 
 .. compatibility:: badge
-  :crm: -
+  :crm: implemented
 
-The function clients requests a JSON with of all connected clients. The key
+The function clients requests a JSON-formatted string which contains all connected clients. The key
 "filter" can be used to filer only the matching client id's of
 interest, for example "dss" to get all connected dss's, "dss001" to
 get a specific dss or an empty string "" to get all clients.  In the return
@@ -518,7 +616,7 @@ CLIENTS - Client list updated
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. compatibility:: badge
-  :crm: -
+  :crm: implemented
 
 As soon as there are changes to the clients list of the CRM it will
 publish the updated client list under topic "clients". The message is equal to the

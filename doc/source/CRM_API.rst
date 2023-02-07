@@ -314,7 +314,7 @@ The CRM replies with id and endpoint information:
 .. _fcncrmgetperformance:
 
 Fcn: get_performance
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. compatibility:: badge
   :crm: implemented
@@ -401,7 +401,7 @@ which only presents the 'killable' processes to the user. This function is only 
 
 .. code-block:: json
   :caption: Function call: **kill_process**
-  :linenos: implemented
+  :linenos:
 
   {
     "fcn": "kill_process",
